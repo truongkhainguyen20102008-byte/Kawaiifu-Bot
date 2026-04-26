@@ -12,13 +12,13 @@ import os
 
 # 🌸 ── Config ──────────────────────────────────────────────────────────────────
 
-BOT_TOKEN       = os.environ.get("BOT_TOKEN")
-GITHUB_TOKEN    = os.environ.get("GITHUB_TOKEN")
+BOT_TOKEN       = os.environ.get("BOT_TOKEN", "")
+GITHUB_TOKEN    = os.environ.get("GITHUB_TOKEN", "")
 GITHUB_USER     = os.environ.get("GITHUB_USER",     "truongkhainguyen20102008-byte")
 GITHUB_REPO     = os.environ.get("GITHUB_REPO",     "thumbnails.json")
 GITHUB_FILE     = os.environ.get("GITHUB_FILE",     "thumbnails.json")
 GITHUB_BRANCH   = os.environ.get("GITHUB_BRANCH",   "main")
-SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "e9ce35fc293796d07e6f5f5adad525f2")
+SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "")
 RAILWAY_PROXY   = "https://ioioioioioioi.up.railway.app/img"
 FANDOM_BASE     = "https://stealabrainrot.fandom.com/wiki/"
 BOT_NAME        = "𝐊𝐚𝐢𝐰𝐚𝐢𝐢𝐟𝐮"
@@ -1289,7 +1289,7 @@ async def on_ready():
     app = aio_web.Application()
     app.router.add_post("/steal-notify", handle_steal_notify)
 
-    port   = int(os.environ.get("PORT", 8080))
+    port   = int(os.environ.get("PORT", 10000))
     runner = aio_web.AppRunner(app)
     await runner.setup()
     site   = aio_web.TCPSite(runner, "0.0.0.0", port)
