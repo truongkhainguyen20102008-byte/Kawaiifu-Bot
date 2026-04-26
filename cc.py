@@ -25,14 +25,14 @@ BOT_NAME        = "𝐊𝐚𝐢𝐰𝐚𝐢𝐢𝐟𝐮"
 
 def make_footer() -> str:
     ts = int(time.time())
-    return f"-# {BOT_NAME} • discord.gg/kaiwaiifunotifier | 🌸 | <t:{ts}:F>"
+    return f"-# discord.gg/kawaiifunotifier  |  ✿  |  <t:{ts}:F>"
 
-FOOTER_TEXT = f"-# {BOT_NAME} • discord.gg/kaiwaiifunotifier"
+FOOTER_TEXT = "-# discord.gg/kawaiifunotifier  |  ✿"
 FLAGS_V2       = 32768
 FLAGS_EPHEMERAL = 64
 FLAGS_V2_EPH   = FLAGS_V2 | FLAGS_EPHEMERAL   # Components V2 + ephemeral
 OWNER_ID        = 698675478093103136
-STEAL_CHANNEL   = os.environ.get("STEAL_CHANNEL", "0")   # Channel ID để bot gửi thông báo steal
+STEAL_CHANNEL   = os.environ.get("STEAL_CHANNEL", "0")   # Discord channel ID for steal notifications
 
 # 🌸 ── Steal Storage (in-memory) ──────────────────────────────────────────────
 
@@ -121,7 +121,7 @@ async def send_v2(interaction: discord.Interaction, components: list[dict]):
                 raise Exception(f"Discord {r.status}: {(await r.text())[:200]}")
 
 async def send_v2_eph(interaction: discord.Interaction, components: list[dict]):
-    """Gửi response dạng ephemeral — chỉ người dùng lệnh mới thấy."""
+    """Send an ephemeral response — only visible to the user who ran the command."""
     url = webhook_url(interaction)
     async with aiohttp.ClientSession() as s:
         async with s.post(url, json={"flags": FLAGS_V2_EPH, "components": components}) as r:
@@ -612,7 +612,13 @@ async def listpets(interaction: discord.Interaction):
             if j > 0:
                 items.append(sep())
             items.append(section(f"**{pname}**", data[pname]))
-        await post_followup([container(*items)])
+        # Interleave dividers between section cards
+        interleaved = []
+        for idx, item in enumerate(items):
+            if idx > 0:
+                interleaved.append({"type": 14, "divider": True, "spacing": 1})
+            interleaved.append(item)
+        await post_followup([{"type": 17, "accent_color": 3092790, "components": interleaved}])
         await asyncio.sleep(0.8)
 
     await post_followup([container(
@@ -986,12 +992,12 @@ async def on_interaction(interaction: discord.Interaction):
 
 # 🌸 ── /steal ─────────────────────────────────────────────────────────────────
 # Chỉ đăng ký mapping Roblox username → Discord ID
-# Khi Lua script gửi thông báo steal, bot sẽ tra cứu mapping này để tag đúng người
+# Khi Lua script gửi thông báo steal, bot sẽ tra cứu mapping này để tag đúng users
 
-@tree.command(name="steal", description="Đăng ký Roblox username và Discord ID của người stealer.")
+@tree.command(name="steal", description="Register a Roblox username and Discord ID for a stealer.")
 @discord.app_commands.describe(
-    roblox_user = "Tên Roblox của người stealer",
-    discord_id  = "Discord ID (dãy số) của người stealer",
+    roblox_user = "Roblox username of the stealer",
+    discord_id  = "Discord ID (numbers only) of the stealer",
 )
 async def steal_cmd(
     interaction: discord.Interaction,
@@ -1003,9 +1009,9 @@ async def steal_cmd(
 
     if not discord_id.strip().isdigit():
         await send_v2_eph(interaction, [container(
-            txt("## ❌ Discord ID Không Hợp Lệ"),
+            txt("## ❌ Invalid Discord ID"),
             sep(),
-            txt(f"Discord ID phải là dãy số.\n**Bạn nhập:** `{discord_id}`"),
+            txt(f"Discord ID must be numbers only.\n**You entered:** `{discord_id}`"),
             *footer(),
         )])
         return
@@ -1017,19 +1023,19 @@ async def steal_cmd(
     user_map[key] = did
 
     status = (
-        f"🔄 **Cập nhật** — Thay `{old_id}` → `{did}`"
+        f"🔄 **Updated** — Changed `{old_id}` → `{did}`"
         if existed else
-        f"✅ **Đã đăng ký mới**"
+        f"✅ **Newly registered**"
     )
 
     await send_v2_eph(interaction, [container(
-        txt("## 👤 Đăng Ký Stealer"),
+        txt("## 👤 Stealer Registered"),
         sep(),
         txt(
             f"🎮 **Roblox:** `{roblox_user.strip()}`\n"
             f"🆔 **Discord:** <@{did}> (`{did}`)\n\n"
             f"{status}\n\n"
-            f"📋 **Tổng đã đăng ký:** `{len(user_map)}` người"
+            f"📋 **Total registered:** `{len(user_map)}` users"
         ),
         *footer(),
     )])
@@ -1037,10 +1043,10 @@ async def steal_cmd(
 # 🌸 ── /steallist ──────────────────────────────────────────────────────────────
 # Xem lịch sử pet đã steal (do Lua script gửi lên), style giống ảnh
 
-@tree.command(name="steallist", description="Xem danh sách pet đã steal trong session này.")
+@tree.command(name="steallist", description="View the list of stolen pets in this session.")
 @discord.app_commands.describe(
-    filter_user = "Lọc theo Roblox username (tuỳ chọn)",
-    og_only     = "Chỉ hiển thị OG pets",
+    filter_user = "Filter by Roblox username (optional)",
+    og_only     = "Show OG pets only",
 )
 async def steallist_cmd(
     interaction: discord.Interaction,
@@ -1057,11 +1063,11 @@ async def steallist_cmd(
         logs = [e for e in logs if filter_user.lower() in e["roblox_user"].lower()]
 
     if not logs:
-        label = "OG pets" if og_only else (f"pets của `{filter_user}`" if filter_user else "pets")
+        label = "OG pets" if og_only else (f"pets for `{filter_user}`" if filter_user else "pets")
         await send_v2_eph(interaction, [container(
-            txt("## 📋 Danh Sách Steal Trống"),
+            txt("## 📋 Steal List Empty"),
             sep(),
-            txt(f"Chưa có {label} nào được ghi nhận.\nLua script cần chạy và detect steal trước."),
+            txt(f"No {label} recorded yet.\nRun the Lua script in-game first."),
             *footer(),
         )])
         return
@@ -1092,64 +1098,71 @@ async def steallist_cmd(
 
     # ── Header ────────────────────────────────────────────────────────────────
     await post_followup([container(
-        txt("## 📋 Danh Sách Pet Đã Steal"),
+        txt("## 📋 Stolen Pets List"),
         sep(),
         txt(
-            f"🎯 **Tổng session:** `{len(steal_log)}`  •  🔥 **OG:** `{og_count}`\n"
+            f"🎯 **Session total:** `{len(steal_log)}`  •  🔥 **OG:** `{og_count}`\n"
             f"🏆 **Top stealer:** `{top_name}` ({top_users.get(top_name, 0)} pets)\n"
-            + (f"🔍 **Filter:** `{filter_user or 'Tất cả'}`  •  OG only: `{'Yes' if og_only else 'No'}`\n" if filter_user or og_only else "")
-            + f"📊 **Hiển thị:** `{len(logs)}` pets"
+            + (f"🔍 **Filter:** `{filter_user or 'All'}`  •  OG only: `{'Yes' if og_only else 'No'}`\n" if filter_user or og_only else "")
+            + f"📊 **Showing:** `{len(logs)}` pets"
         ),
         *footer(),
     )])
 
-    # ── Cards — style giống ảnh: section với thumbnail bên phải ───────────────
+    # ── Cards — section with thumbnail on the right ─────────────────────────────
     for i in range(0, len(logs), 4):
         chunk = logs[i:i + 4]
         items = []
         for j, e in enumerate(chunk):
             if j > 0:
                 items.append(sep())
-            og_badge  = " 🔥" if e["og"] else ""
-            disc_tag  = f"<@{e['discord_id']}>" if e.get("discord_id") else f"`{e['roblox_user']}`"
-            mut_line  = f"\n-# ✨ {e['mutation']}" if e.get("mutation") and e["mutation"] != "None" else ""
-            items.append(section(
-                f"### {e['pet']}{og_badge}  {e['value']}\n"
-                f"-# Stolen by: {disc_tag}{mut_line}\n"
-                f"-# Steal Detected | <t:{e['ts']}:F>",
-                pet_img(e["pet"]),
-            ))
+            disc_tag  = f"<@{e['discord_id']}>" if e.get("discord_id") else f"@{e['roblox_user']}"
+            body = (
+                f"# 🌸 Kawaiifu Notifier | Steals 🌸\n"
+                f"### 🪨 {e['pet']}  {e['value']}\n\n"
+                f"-# Stolen by: {disc_tag}\n"
+                f"-# Steal Detected | <t:{e['ts']}:F>"
+            )
+            items.append({
+                "type": 9,
+                "components": [{"type": 10, "content": body}],
+                "accessory": {
+                    "type":    11,
+                    "media":   {"url": pet_img(e["pet"]), "loading_state": 2},
+                    "spoiler": False,
+                },
+            })
         await post_followup([container(*items)])
         await asyncio.sleep(0.6)
 
     await post_followup([container(
-        txt(f"-# ✅ Hiển thị xong `{len(logs)}` pets."),
+        txt(f"-# ✅ Done — `{len(logs)}` pets listed."),
         *footer(),
     )])
 
 # 🌸 ── /stealclear ─────────────────────────────────────────────────────────────
 
-@tree.command(name="stealclear", description="Xóa toàn bộ lịch sử steal trong session.")
+@tree.command(name="stealclear", description="Clear all steal history for this session.")
 async def stealclear_cmd(interaction: discord.Interaction):
     if not await owner_check(interaction): return
     count = len(steal_log)
     steal_log.clear()
     await interaction.response.send_message(
-        f"🗑️ Đã xóa `{count}` bản ghi steal.", ephemeral=True
+        f"🗑️ Cleared `{count}` steal records.", ephemeral=True
     )
 
 # 🌸 ── /stealusers ─────────────────────────────────────────────────────────────
 
-@tree.command(name="stealusers", description="Xem danh sách Roblox username đã đăng ký Discord ID.")
+@tree.command(name="stealusers", description="View all registered Roblox → Discord mappings.")
 async def stealusers_cmd(interaction: discord.Interaction):
     if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True, ephemeral=True)
 
     if not user_map:
         await send_v2_eph(interaction, [container(
-            txt("## 👥 Danh Sách User Trống"),
+            txt("## 👥 No Users Registered"),
             sep(),
-            txt("Chưa có ai đăng ký.\nDùng `/steal` để đăng ký Roblox username + Discord ID."),
+            txt("No one registered yet.\nUse `/steal` to link a Roblox username to a Discord ID."),
             *footer(),
         )])
         return
@@ -1159,9 +1172,9 @@ async def stealusers_cmd(interaction: discord.Interaction):
         for rblx, did in sorted(user_map.items())
     )
     await send_v2_eph(interaction, [container(
-        txt("## 👥 Danh Sách Stealer Đã Đăng Ký"),
+        txt("## 👥 Registered Stealers"),
         sep(),
-        txt(f"📋 **Tổng:** `{len(user_map)}` người\n\n{lines}"),
+        txt(f"📋 **Total:** `{len(user_map)}` users\n\n{lines}"),
         *footer(),
     )])
 
@@ -1188,13 +1201,11 @@ async def handle_steal_notify(request):
         img_url     = pet_img(pet_name)
         color       = 16753920 if og else 3092790
 
-        # Tra cứu Discord ID từ mapping
+        # Look up Discord ID from user_map
         discord_id  = user_map.get(roblox_user.lower())
         stolen_by   = f"<@{discord_id}>" if discord_id else f"@{roblox_user}"
 
-        mut_line = f"\n-# ✨ {mutation}" if mutation and mutation != "None" else ""
-
-        # Ghi vào log
+        # Log the steal entry
         steal_log.append({
             "pet":         pet_name,
             "value":       value,
@@ -1210,44 +1221,35 @@ async def handle_steal_notify(request):
             from aiohttp.web import Response
             return Response(status=200, text="No channel configured")
 
+        body_text = (
+            f"# 🌸 Kawaiifu Notifier | Steals 🌸\n"
+            f"### 🪨 {pet_name}  {value}\n\n"
+            f"-# Stolen by: {stolen_by}\n"
+            f"-# Steal Detected | <t:{ts}:F>"
+        )
+
         payload = {
             "flags": FLAGS_V2,
-            "components": [container(
-                txt(
-                    f"### {'🔥 OG PET' if og else '⚡'} {pet_name}  {value}"
-                    f"\n-# Stolen by: {stolen_by}{mut_line}"
-                    f"\n-# Steal Detected | <t:{ts}:F>"
-                ),
-                # Section với thumbnail ở phải — style giống ảnh
-            )] if False else [  # placeholder — xem bên dưới
+            "components": [
                 {
                     "type": 17,
                     "accent_color": color,
                     "components": [
                         {
                             "type": 9,
-                            "components": [{
-                                "type":    10,
-                                "content": (
-                                    f"**{'Goblin Notifier | Steals' if not og else '🔥 OG — Goblin Notifier | Steals'}**\n"
-                                    f"### {'🪨' if not og else '🔥'} {pet_name}  {value}\n"
-                                    f"-# Stolen by: {stolen_by}{mut_line}\n"
-                                    f"-# Steal Detected | <t:{ts}:F>"
-                                ),
-                            }],
+                            "components": [{"type": 10, "content": body_text}],
                             "accessory": {
-                                "type":   11,
-                                "media":  {"url": img_url, "loading_state": 2},
+                                "type":    11,
+                                "media":   {"url": img_url, "loading_state": 2},
                                 "spoiler": False,
                             },
                         },
+                        {"type": 14, "divider": True, "spacing": 1},
+                        {"type": 10, "content": make_footer()},
                     ],
                 }
             ],
         }
-
-        if og:
-            payload["content"] = "@everyone"
 
         async with aiohttp.ClientSession() as s:
             async with s.post(
@@ -1283,7 +1285,7 @@ async def on_ready():
     print(f"[KW] 🌸 Logged in as: {bot.user}")
     print(f"[KW] ✅ Slash commands synced!")
 
-    # Start HTTP server để nhận thông báo steal từ Lua script
+    # Start HTTP server to receive steal notifications from Lua script
     from aiohttp import web as aio_web
 
     app = aio_web.Application()
