@@ -36,8 +36,10 @@ STEAL_CHANNEL   = os.environ.get("STEAL_CHANNEL", "0")   # Discord channel ID fo
 
 # 🌸 ── Steal Storage (in-memory) ──────────────────────────────────────────────
 
-# user_map: { roblox_username_lower -> discord_id_str }
-user_map:  dict[str, str]  = {}
+# user_map:     { roblox_username_lower -> discord_id_str }
+# discord_map:  { discord_id_str -> roblox_username_lower }  (reverse lookup)
+user_map:    dict[str, str] = {}
+discord_map: dict[str, str] = {}  # discord_id -> current roblox username
 
 # steal_log: list of dicts { pet, value, mutation, roblox_user, discord_id, ts }
 steal_log: list[dict] = []
@@ -836,6 +838,50 @@ async def on_interaction(interaction: discord.Interaction):
         async with aiohttp.ClientSession() as s:
             await s.patch(orig_url, json={"flags": FLAGS_V2, "components": components})
 
+    # 🌸 Steal — Yes / No confirm (change roblox username for a Discord ID)
+
+    if custom_id.startswith("steal_confirm_yes:") or custom_id.startswith("steal_confirm_no:"):
+        did    = custom_id.split(":")[1]
+        action = "yes" if custom_id.startswith("steal_confirm_yes") else "no"
+
+        await interaction.response.defer()
+
+        pending = getattr(bot, "_pending_steal", {}).get(did)
+
+        if action == "no" or not pending:
+            async with aiohttp.ClientSession() as s:
+                await s.patch(orig_url, json={"flags": FLAGS_V2_EPH, "components": [container(
+                    txt("## ❌ Cancelled"),
+                    sep(),
+                    txt("No changes were made. Current registration is kept."),
+                    *footer(),
+                )]})
+        else:
+            key        = pending["key"]
+            roblox_str = pending["roblox_user"]
+
+            # Remove old reverse entry
+            old_roblox = discord_map.get(did)
+            if old_roblox:
+                user_map.pop(old_roblox, None)
+
+            user_map[key]    = did
+            discord_map[did] = key
+            getattr(bot, "_pending_steal", {}).pop(did, None)
+
+            async with aiohttp.ClientSession() as s:
+                await s.patch(orig_url, json={"flags": FLAGS_V2_EPH, "components": [container(
+                    txt("## ✅ Registration Updated"),
+                    sep(),
+                    txt(
+                        f"🎮 **New Roblox:** `{roblox_str}`\n"
+                        f"🆔 **Discord:** <@{did}>\n\n"
+                        f"🔄 Username successfully changed."
+                    ),
+                    *footer(),
+                )]})
+        return
+
     # 🌸 Mypets — Prev / Next pagination
 
     if custom_id.startswith("mypets_prev:") or custom_id.startswith("mypets_next:"):
@@ -847,16 +893,14 @@ async def on_interaction(interaction: discord.Interaction):
 
         await interaction.response.defer()
 
-        logs = getattr(bot, "_mypets_pages", {}).get(discord_id, [])
+        cache    = getattr(bot, "_mypets_pages", {}).get(discord_id)
+        logs     = cache["logs"] if isinstance(cache, dict) else cache or []
+        username = cache.get("username", "") if isinstance(cache, dict) else ""
         if not logs:
-            await patch_orig([container(
-                txt("## ⚠️ Session Expired"),
-                sep(),
-                txt("Please run `/mypets` again."),
-            )])
+            await interaction.followup.send("⚠️ Session expired — please run `/mypets` again.", ephemeral=True)
             return
 
-        components = build_mypets_page(logs, new_page, discord_id)
+        components = build_mypets_page(logs, new_page, discord_id, username)
         async with aiohttp.ClientSession() as s:
             await s.patch(orig_url, json={"flags": FLAGS_V2_EPH, "components": components})
         return
@@ -1041,24 +1085,86 @@ async def steal_cmd(
         )])
         return
 
-    key      = roblox_user.strip().lower()
-    did      = discord_id.strip()
-    existed  = key in user_map
-    old_id   = user_map.get(key)
-    user_map[key] = did
+    key = roblox_user.strip().lower()
+    did = discord_id.strip()
 
-    status = (
-        f"🔄 **Updated** — Changed `{old_id}` → `{did}`"
-        if existed else
-        f"✅ **Newly registered**"
-    )
+    roblox_already_linked = key in user_map        # this roblox name is registered
+    discord_already_has   = did in discord_map     # this discord id already has a roblox
+    same_roblox_same_did  = roblox_already_linked and user_map[key] == did
+    same_did_diff_roblox  = discord_already_has and discord_map[did] != key
+
+    wh_url = webhook_url(interaction)
+
+    # ── Case 1: exact same pair already registered ────────────────────────────
+    if same_roblox_same_did:
+        await send_v2_eph(interaction, [container(
+            txt("## ✅ Already Registered"),
+            sep(),
+            txt(
+                f"🎮 **Roblox:** `{roblox_user.strip()}`\n"
+                f"🆔 **Discord:** <@{did}>\n\n"
+                f"This mapping is already active. No changes made."
+            ),
+            *footer(),
+        )])
+        return
+
+    # ── Case 2: Discord ID already linked to a DIFFERENT Roblox username ─────
+    if same_did_diff_roblox:
+        old_roblox = discord_map[did]
+
+        # Store pending change so button handler can apply it
+        if not hasattr(bot, "_pending_steal"):
+            bot._pending_steal = {}
+        bot._pending_steal[did] = {"key": key, "roblox_user": roblox_user.strip(), "did": did}
+
+        confirm_components = [container(
+            txt("## ⚠️ Discord Already Registered"),
+            sep(),
+            txt(
+                f"<@{did}> is already linked to `{old_roblox}`\n\n"
+                f"Do you want to change it to `{roblox_user.strip()}`?"
+            ),
+            sep(),
+            {
+                "type": 1,
+                "components": [
+                    {
+                        "type": 2, "style": 3,
+                        "label": "✅  Yes, change it",
+                        "custom_id": f"steal_confirm_yes:{did}",
+                    },
+                    {
+                        "type": 2, "style": 4,
+                        "label": "❌  No, keep current",
+                        "custom_id": f"steal_confirm_no:{did}",
+                    },
+                ],
+            },
+            *footer(),
+        )]
+
+        async with aiohttp.ClientSession() as s:
+            await s.post(wh_url, json={"flags": FLAGS_V2_EPH, "components": confirm_components})
+        return
+
+    # ── Case 3: fresh registration or roblox-key change ──────────────────────
+    # Remove old reverse entry if roblox key was previously mapped to another discord
+    if roblox_already_linked:
+        old_did = user_map[key]
+        discord_map.pop(old_did, None)
+
+    user_map[key]  = did
+    discord_map[did] = key
+
+    status = "🔄 **Updated** — Roblox username changed." if roblox_already_linked else "✅ **Newly registered**"
 
     await send_v2_eph(interaction, [container(
         txt("## 👤 Stealer Registered"),
         sep(),
         txt(
             f"🎮 **Roblox:** `{roblox_user.strip()}`\n"
-            f"🆔 **Discord:** <@{did}> (`{did}`)\n\n"
+            f"🆔 **Discord:** <@{did}>\n\n"
             f"{status}\n\n"
             f"📋 **Total registered:** `{len(user_map)}` users"
         ),
@@ -1071,28 +1177,42 @@ async def steal_cmd(
 
 PAGE_SIZE = 5
 
-def build_mypets_page(logs: list[dict], page: int, discord_id: str) -> list[dict]:
+def _parse_value(val: str) -> float:
+    """Parse pet value string like '$1.4B/s' into a float."""
+    try:
+        v = val.replace("$","").replace(",","").strip()
+        for suffix, exp in [("B/s",1e9),("M/s",1e6),("K/s",1e3),("B",1e9),("M",1e6),("K",1e3)]:
+            if v.endswith(suffix):
+                return float(v[:-len(suffix)]) * exp
+        return float(v)
+    except Exception:
+        return 0.0
+
+def _fmt_value(n: float) -> str:
+    """Format float back to compact string like 1.4B."""
+    if n >= 1e9: return f"{n/1e9:.2f}B".rstrip("0").rstrip(".")
+    if n >= 1e6: return f"{n/1e6:.2f}M".rstrip("0").rstrip(".")
+    if n >= 1e3: return f"{n/1e3:.2f}K".rstrip("0").rstrip(".")
+    return str(int(n))
+
+PINK = 16758725  # 0xFFB7C5 sakura pink
+
+def build_mypets_page(logs: list[dict], page: int, discord_id: str, username: str = "") -> list[dict]:
     """Build Components V2 for one page of /mypets."""
-    total_pages = max(1, -(-len(logs) // PAGE_SIZE))   # ceil div
-    start       = page * PAGE_SIZE
-    chunk       = logs[start:start + PAGE_SIZE]
-
-    total_val   = sum(
-        float(e["value"].replace("$","").replace(",","")
-              .replace("B/s","e9").replace("M/s","e6").replace("K/s","e3")
-              .replace("B","e9").replace("M","e6").replace("K","e3"))
-        for e in logs
-        if e.get("value")
-        for _ in [None]  # dummy loop for assignment
-    ) if False else 0  # skip complex parsing, show count instead
-
+    total_pages  = max(1, -(-len(logs) // PAGE_SIZE))  # ceil div
+    start        = page * PAGE_SIZE
+    chunk        = logs[start:start + PAGE_SIZE]
     total_steals = len(logs)
+    total_val    = sum(_parse_value(e["value"]) for e in logs if e.get("value"))
+    val_str      = _fmt_value(total_val)
+
+    display_name = f"@{username}" if username else f"<@{discord_id}>"
 
     # ── Header text ──────────────────────────────────────────────────────────
     header_text = (
         f"**Steal Profile**\n"
-        f"@Rented To {discord_id}\n"
-        f"-# Total Steals: {total_steals}  ·  Page {page + 1}/{total_pages}"
+        f"{display_name}\n"
+        f"Total Steals: {total_steals}  ·  Total Value: {val_str}"
     )
 
     # ── Pet rows ─────────────────────────────────────────────────────────────
@@ -1122,7 +1242,7 @@ def build_mypets_page(logs: list[dict], page: int, discord_id: str) -> list[dict
     components.append({"type": 14, "divider": True, "spacing": 1})
     components.append({"type": 10, "content": make_footer()})
 
-    container_block = {"type": 17, "accent_color": 3092790, "components": components}
+    container_block = {"type": 17, "accent_color": PINK, "components": components}
 
     # ── Prev / Next buttons ───────────────────────────────────────────────────
     prev_btn = {
@@ -1168,12 +1288,13 @@ async def mypets_cmd(interaction: discord.Interaction):
             })
         return
 
-    # Cache logs for button navigation
+    # Cache logs + username for button navigation
     if not hasattr(bot, "_mypets_pages"):
         bot._mypets_pages = {}
-    bot._mypets_pages[discord_id] = logs
+    username = interaction.user.display_name
+    bot._mypets_pages[discord_id] = {"logs": logs, "username": username}
 
-    components = build_mypets_page(logs, 0, discord_id)
+    components = build_mypets_page(logs, 0, discord_id, username)
     wh_url = webhook_url(interaction)
     async with aiohttp.ClientSession() as s:
         await s.post(wh_url, json={"flags": FLAGS_V2_EPH, "components": components})
