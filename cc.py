@@ -836,6 +836,31 @@ async def on_interaction(interaction: discord.Interaction):
         async with aiohttp.ClientSession() as s:
             await s.patch(orig_url, json={"flags": FLAGS_V2, "components": components})
 
+    # 🌸 Mypets — Prev / Next pagination
+
+    if custom_id.startswith("mypets_prev:") or custom_id.startswith("mypets_next:"):
+        parts      = custom_id.split(":")
+        action     = parts[0]          # mypets_prev or mypets_next
+        discord_id = parts[1]
+        cur_page   = int(parts[2])
+        new_page   = cur_page - 1 if action == "mypets_prev" else cur_page + 1
+
+        await interaction.response.defer()
+
+        logs = getattr(bot, "_mypets_pages", {}).get(discord_id, [])
+        if not logs:
+            await patch_orig([container(
+                txt("## ⚠️ Session Expired"),
+                sep(),
+                txt("Please run `/mypets` again."),
+            )])
+            return
+
+        components = build_mypets_page(logs, new_page, discord_id)
+        async with aiohttp.ClientSession() as s:
+            await s.patch(orig_url, json={"flags": FLAGS_V2_EPH, "components": components})
+        return
+
     # 🌸 Fetchpet — Overwrite Yes
 
     if custom_id.startswith("overwrite_yes:"):
@@ -1040,105 +1065,118 @@ async def steal_cmd(
         *footer(),
     )])
 
-# 🌸 ── /steallist ──────────────────────────────────────────────────────────────
-# Xem lịch sử pet đã steal (do Lua script gửi lên), style giống ảnh
+# 🌸 ── /mypets ───────────────────────────────────────────────────────────────
+# Per-user paginated steal history, style like the screenshot
+# Pages stored in bot._mypets_pages keyed by user_id
 
-@tree.command(name="steallist", description="View the list of stolen pets in this session.")
-@discord.app_commands.describe(
-    filter_user = "Filter by Roblox username (optional)",
-    og_only     = "Show OG pets only",
-)
-async def steallist_cmd(
-    interaction: discord.Interaction,
-    filter_user: str  = "",
-    og_only:     bool = False,
-):
-    if not await owner_check(interaction): return
+PAGE_SIZE = 5
+
+def build_mypets_page(logs: list[dict], page: int, discord_id: str) -> list[dict]:
+    """Build Components V2 for one page of /mypets."""
+    total_pages = max(1, -(-len(logs) // PAGE_SIZE))   # ceil div
+    start       = page * PAGE_SIZE
+    chunk       = logs[start:start + PAGE_SIZE]
+
+    total_val   = sum(
+        float(e["value"].replace("$","").replace(",","")
+              .replace("B/s","e9").replace("M/s","e6").replace("K/s","e3")
+              .replace("B","e9").replace("M","e6").replace("K","e3"))
+        for e in logs
+        if e.get("value")
+        for _ in [None]  # dummy loop for assignment
+    ) if False else 0  # skip complex parsing, show count instead
+
+    total_steals = len(logs)
+
+    # ── Header text ──────────────────────────────────────────────────────────
+    header_text = (
+        f"**Steal Profile**\n"
+        f"@Rented To {discord_id}\n"
+        f"-# Total Steals: {total_steals}  ·  Page {page + 1}/{total_pages}"
+    )
+
+    # ── Pet rows ─────────────────────────────────────────────────────────────
+    components: list[dict] = [
+        {"type": 10, "content": header_text},
+        {"type": 14, "divider": True, "spacing": 1},
+    ]
+
+    for i, e in enumerate(chunk):
+        pet_block = (
+            f"### {e['pet']}\n"
+            f"Generation: {e['value']}\n"
+            f"-# <t:{e['ts']}:R>"
+        )
+        components.append({
+            "type": 9,
+            "components": [{"type": 10, "content": pet_block}],
+            "accessory": {
+                "type":    11,
+                "media":   {"url": pet_img(e["pet"]), "loading_state": 2},
+                "spoiler": False,
+            },
+        })
+        if i < len(chunk) - 1:
+            components.append({"type": 14, "divider": True, "spacing": 1})
+
+    components.append({"type": 14, "divider": True, "spacing": 1})
+    components.append({"type": 10, "content": make_footer()})
+
+    container_block = {"type": 17, "accent_color": 3092790, "components": components}
+
+    # ── Prev / Next buttons ───────────────────────────────────────────────────
+    prev_btn = {
+        "type": 2, "style": 2,
+        "label": "◀  Previous",
+        "custom_id": f"mypets_prev:{discord_id}:{page}",
+        "disabled": page == 0,
+    }
+    next_btn = {
+        "type": 2, "style": 2,
+        "label": "Next  ▶",
+        "custom_id": f"mypets_next:{discord_id}:{page}:{total_pages}",
+        "disabled": page >= total_pages - 1,
+    }
+    btn_row = {"type": 1, "components": [prev_btn, next_btn]}
+
+    return [container_block, btn_row]
+
+
+@tree.command(name="mypets", description="View your stolen pets with pagination.")
+async def mypets_cmd(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
 
-    logs = list(steal_log)
-    if og_only:
-        logs = [e for e in logs if e["og"]]
-    if filter_user:
-        logs = [e for e in logs if filter_user.lower() in e["roblox_user"].lower()]
+    discord_id = str(interaction.user.id)
+
+    # Find this user's logs
+    logs = [e for e in steal_log if e.get("discord_id") == discord_id]
 
     if not logs:
-        label = "OG pets" if og_only else (f"pets for `{filter_user}`" if filter_user else "pets")
-        await send_v2_eph(interaction, [container(
-            txt("## 📋 Steal List Empty"),
-            sep(),
-            txt(f"No {label} recorded yet.\nRun the Lua script in-game first."),
-            *footer(),
-        )])
+        wh_url = webhook_url(interaction)
+        async with aiohttp.ClientSession() as s:
+            await s.post(wh_url, json={
+                "flags": FLAGS_V2_EPH,
+                "components": [container(
+                    txt("## 📋 No Steals Found"),
+                    sep(),
+                    txt(
+                        f"No stolen pets recorded for <@{discord_id}> yet.\n"
+                        "Make sure your Roblox username is registered with `/steal`."
+                    ),
+                    *footer(),
+                )],
+            })
         return
 
-    og_count  = sum(1 for e in steal_log if e["og"])
-    top_users: dict[str, int] = {}
-    for e in steal_log:
-        top_users[e["roblox_user"]] = top_users.get(e["roblox_user"], 0) + 1
-    top_name = max(top_users, key=top_users.get) if top_users else "N/A"
+    # Cache logs for button navigation
+    if not hasattr(bot, "_mypets_pages"):
+        bot._mypets_pages = {}
+    bot._mypets_pages[discord_id] = logs
 
+    components = build_mypets_page(logs, 0, discord_id)
     wh_url = webhook_url(interaction)
-
-    async def post_followup(components: list[dict]):
-        payload = {"flags": FLAGS_V2_EPH, "components": components}
-        for _ in range(5):
-            async with aiohttp.ClientSession() as s:
-                async with s.post(wh_url, json=payload) as r:
-                    if r.status in (200, 204):
-                        return
-                    body = await r.text()
-                    if r.status == 429:
-                        ra = 1.5
-                        try: ra = json.loads(body).get("retry_after", 1.5)
-                        except Exception: pass
-                        await asyncio.sleep(float(ra) + 0.2)
-                        continue
-                    raise Exception(f"Discord {r.status}: {body[:200]}")
-
-    # ── Header ────────────────────────────────────────────────────────────────
-    await post_followup([container(
-        txt("## 📋 Stolen Pets List"),
-        sep(),
-        txt(
-            f"🎯 **Session total:** `{len(steal_log)}`  •  🔥 **OG:** `{og_count}`\n"
-            f"🏆 **Top stealer:** `{top_name}` ({top_users.get(top_name, 0)} pets)\n"
-            + (f"🔍 **Filter:** `{filter_user or 'All'}`  •  OG only: `{'Yes' if og_only else 'No'}`\n" if filter_user or og_only else "")
-            + f"📊 **Showing:** `{len(logs)}` pets"
-        ),
-        *footer(),
-    )])
-
-    # ── Cards — section with thumbnail on the right ─────────────────────────────
-    for i in range(0, len(logs), 4):
-        chunk = logs[i:i + 4]
-        items = []
-        for j, e in enumerate(chunk):
-            if j > 0:
-                items.append(sep())
-            disc_tag  = f"<@{e['discord_id']}>" if e.get("discord_id") else f"@{e['roblox_user']}"
-            body = (
-                f"# 🌸 Kawaiifu Notifier | Steals 🌸\n"
-                f"### 🪨 {e['pet']}  {e['value']}\n\n"
-                f"-# Stolen by: {disc_tag}\n"
-                f"-# Steal Detected | <t:{e['ts']}:F>"
-            )
-            items.append({
-                "type": 9,
-                "components": [{"type": 10, "content": body}],
-                "accessory": {
-                    "type":    11,
-                    "media":   {"url": pet_img(e["pet"]), "loading_state": 2},
-                    "spoiler": False,
-                },
-            })
-        await post_followup([container(*items)])
-        await asyncio.sleep(0.6)
-
-    await post_followup([container(
-        txt(f"-# ✅ Done — `{len(logs)}` pets listed."),
-        *footer(),
-    )])
+    async with aiohttp.ClientSession() as s:
+        await s.post(wh_url, json={"flags": FLAGS_V2_EPH, "components": components})
 
 # 🌸 ── /stealclear ─────────────────────────────────────────────────────────────
 
