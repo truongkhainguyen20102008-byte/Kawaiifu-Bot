@@ -1165,8 +1165,7 @@ async def steal_cmd(
         txt(
             f"🎮 **Roblox:** `{roblox_user.strip()}`\n"
             f"🆔 **Discord:** <@{did}>\n\n"
-            f"{status}\n\n"
-            f"📋 **Total registered:** `{len(user_map)}` users"
+            f"{status}"
         ),
         *footer(),
     )])
@@ -1380,29 +1379,34 @@ async def handle_steal_notify(request):
             from aiohttp.web import Response
             return Response(status=200, text="No channel configured")
 
-        body_text = (
-            f"# 🌸 Kawaiifu Notifier | Steals 🌸\n"
-            f"### 🪨 {pet_name}  {value}\n\n"
-            f"-# Stolen by: {stolen_by}\n"
-            f"-# Steal Detected | <t:{ts}:F>"
-        )
-
         payload = {
             "flags": FLAGS_V2,
             "components": [
                 {
                     "type": 17,
-                    "accent_color": color,
+                    "accent_color": PINK,
                     "components": [
+                        # Title
+                        {"type": 10, "content": "# 🌸 Kawaiifu Notifier | Steals 🌸"},
+                        {"type": 14, "divider": True, "spacing": 1},
+                        # Pet row with thumbnail
                         {
                             "type": 9,
-                            "components": [{"type": 10, "content": body_text}],
+                            "components": [{
+                                "type":    10,
+                                "content": (
+                                    f"### 🪨 {pet_name}  {value}\n"
+                                    f"Stolen by: {stolen_by}"
+                                ),
+                            }],
                             "accessory": {
                                 "type":    11,
                                 "media":   {"url": img_url, "loading_state": 2},
                                 "spoiler": False,
                             },
                         },
+                        {"type": 14, "divider": True, "spacing": 1},
+                        {"type": 10, "content": f"-# Steal Detected | <t:{ts}:F>"},
                         {"type": 14, "divider": True, "spacing": 1},
                         {"type": 10, "content": make_footer()},
                     ],
