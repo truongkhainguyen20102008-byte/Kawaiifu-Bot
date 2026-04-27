@@ -10,7 +10,7 @@ import urllib.parse
 from urllib.parse import quote, unquote
 import os
 
-# 🌸 ── Config ──────────────────────────────────────────────────────────────────
+# ── Config ─────────────────────────────────────────────────────────────────────
 
 BOT_TOKEN       = os.environ.get("BOT_TOKEN",       "")
 GITHUB_TOKEN    = os.environ.get("GITHUB_TOKEN",    "")
@@ -22,20 +22,21 @@ GITHUB_BRANCH   = os.environ.get("GITHUB_BRANCH",   "main")
 SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "e8199d05cb8cb7de6e00cc1cc9820fc8")
 RAILWAY_PROXY   = "https://ioioioioioioi.up.railway.app/img"
 FANDOM_BASE     = "https://stealabrainrot.fandom.com/wiki/"
-BOT_NAME        = "𝐊𝐚𝐢𝐰𝐚𝐢𝐢𝐟𝐮"
+BOT_NAME        = "Kawaiifu"
 
 def make_footer() -> str:
     ts = int(time.time())
     return f"-# discord.gg/kawaiifunotifier  |  ✿  |  <t:{ts}:F>"
 
-FOOTER_TEXT = "-# discord.gg/kawaiifunotifier  |  ✿"
+FOOTER_TEXT     = "-# discord.gg/kawaiifunotifier  |  ✿"
 FLAGS_V2        = 32768
 FLAGS_EPHEMERAL = 64
-FLAGS_V2_EPH    = FLAGS_V2 | FLAGS_EPHEMERAL   # Components V2 + ephemeral
+FLAGS_V2_EPH    = FLAGS_V2 | FLAGS_EPHEMERAL
 OWNER_ID        = 698675478093103136
-STEAL_CHANNEL   = os.environ.get("STEAL_CHANNEL", "0")   # Discord channel ID for steal notifications
+STEAL_CHANNEL   = os.environ.get("STEAL_CHANNEL", "0")
+PINK            = 16758725   # 0xFFB7C5 — Used everywhere
 
-# 🌸 ── Steal Storage (persistent JSON) ─────────────────────────────────────────
+# ── Steal Storage ──────────────────────────────────────────────────────────────
 
 DATA_FILE = "steal_data.json"
 
@@ -43,10 +44,7 @@ def _load_data() -> tuple[dict, dict, list]:
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
-        um  = d.get("user_map",    {})
-        dm  = d.get("discord_map", {})
-        sl  = d.get("steal_log",   [])
-        return um, dm, sl
+        return d.get("user_map", {}), d.get("discord_map", {}), d.get("steal_log", [])
     except (FileNotFoundError, json.JSONDecodeError):
         return {}, {}, []
 
@@ -55,7 +53,7 @@ def _save_data():
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump({"user_map": user_map, "discord_map": discord_map, "steal_log": steal_log}, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"[KW] ⚠️ Failed to save data: {e}")
+        print(f"[KW] Warning: Failed To Save Data: {e}")
 
 user_map, discord_map, steal_log = _load_data()
 
@@ -89,32 +87,32 @@ async def refresh_thumb_cache():
         async with aiohttp.ClientSession() as s:
             async with s.get(url, headers=headers) as r:
                 if r.status == 200:
-                    result  = await r.json()
-                    decoded = base64.b64decode(result["content"]).decode()
-                    loaded  = json.loads(decoded)
+                    result       = await r.json()
+                    decoded      = base64.b64decode(result["content"]).decode()
+                    loaded       = json.loads(decoded)
                     _thumb_cache = {k.lower().strip(): v for k, v in loaded.items()}
-                    print(f"[KW] ✅ Thumbnail cache refreshed — {len(_thumb_cache)} pets")
+                    print(f"[KW] Thumbnail Cache Refreshed — {len(_thumb_cache)} Pets")
     except Exception as e:
-        print(f"[KW] ⚠️ Could not refresh thumbnail cache: {e}")
+        print(f"[KW] Warning: Could Not Refresh Thumbnail Cache: {e}")
 
-# 🌸 ── Bot Setup ───────────────────────────────────────────────────────────────
+# ── Bot Setup ──────────────────────────────────────────────────────────────────
 
 intents = discord.Intents.default()
 bot     = commands.Bot(command_prefix="!", intents=intents)
 tree    = bot.tree
 
-# 🌸 ── Owner Guard ─────────────────────────────────────────────────────────────
+# ── Owner Guard ────────────────────────────────────────────────────────────────
 
 async def owner_check(interaction: discord.Interaction) -> bool:
     if interaction.user.id != OWNER_ID:
         await interaction.response.send_message(
-            "🚫 **Access Denied** — This command is for the owner only.",
+            "🚫 **Access Denied** — This Command Is For The Owner Only.",
             ephemeral=True
         )
         return False
     return True
 
-# 🌸 ── Components V2 ───────────────────────────────────────────────────────────
+# ── Components V2 ──────────────────────────────────────────────────────────────
 
 def txt(content: str) -> dict:
     return {"type": 10, "content": content}
@@ -133,13 +131,13 @@ def section(content: str, thumbnail_url: str) -> dict:
         "type": 9,
         "components": [{"type": 10, "content": content}],
         "accessory": {
-            "type": 11,
-            "media": {"url": thumbnail_url, "loading_state": 2},
+            "type":    11,
+            "media":   {"url": thumbnail_url, "loading_state": 2},
             "spoiler": False,
         },
     }
 
-def container(*items: dict, color: int = 16738740) -> dict:
+def container(*items: dict, color: int = PINK) -> dict:
     return {"type": 17, "accent_color": color, "components": list(items)}
 
 def action_row(*buttons: dict) -> dict:
@@ -148,7 +146,7 @@ def action_row(*buttons: dict) -> dict:
 def button(label: str, custom_id: str, style: int = 2) -> dict:
     return {"type": 2, "style": style, "label": label, "custom_id": custom_id}
 
-# 🌸 ── Discord Helpers ─────────────────────────────────────────────────────────
+# ── Discord Helpers ────────────────────────────────────────────────────────────
 
 def webhook_url(interaction: discord.Interaction) -> str:
     return f"https://discord.com/api/v10/webhooks/{interaction.application_id}/{interaction.token}"
@@ -172,7 +170,7 @@ async def patch_original(wh_url: str, components: list[dict]):
     async with aiohttp.ClientSession() as s:
         await s.patch(url, json={"flags": FLAGS_V2, "components": components})
 
-# 🌸 ── URL Helpers ─────────────────────────────────────────────────────────────
+# ── URL Helpers ────────────────────────────────────────────────────────────────
 
 def is_railway(url: str) -> bool:
     return "ioioioioioioi.up.railway.app" in url
@@ -208,7 +206,7 @@ def convert_to_railway(url: str) -> str:
 def shorten(url: str, limit: int = 260) -> str:
     return url[:limit] + "..." if len(url) > limit else url
 
-# 🌸 ── GitHub Helpers ──────────────────────────────────────────────────────────
+# ── GitHub Helpers ─────────────────────────────────────────────────────────────
 
 def parse_lua_table(text: str) -> dict:
     data = {}
@@ -256,16 +254,14 @@ async def _get_file_sha(session: aiohttp.ClientSession, filename: str) -> str | 
         return None
 
 async def push_thumbnails(data: dict, sha: str, msg: str):
-    sorted_data = dict(sorted(data.items(), key=lambda x: x[0].lower()))
-    headers     = {
+    sorted_data  = dict(sorted(data.items(), key=lambda x: x[0].lower()))
+    headers      = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept":        "application/vnd.github.v3+json",
         "Content-Type":  "application/json",
     }
-
     lua_encoded  = base64.b64encode(to_lua_table(sorted_data).encode()).decode()
     url1         = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{GITHUB_FILE}"
-
     json_content = json.dumps(sorted_data, ensure_ascii=False, indent=2)
     json_encoded = base64.b64encode(json_content.encode()).decode()
     url2         = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{GITHUB_FILE2}"
@@ -275,20 +271,20 @@ async def push_thumbnails(data: dict, sha: str, msg: str):
             json={"message": msg, "content": lua_encoded, "sha": sha, "branch": GITHUB_BRANCH}
         ) as r:
             if r.status not in (200, 201):
-                raise Exception(f"GitHub Push (lua) {r.status}: {(await r.text())[:300]}")
+                raise Exception(f"GitHub Push (Lua) {r.status}: {(await r.text())[:300]}")
 
-        sha2 = await _get_file_sha(s, GITHUB_FILE2)
-        payload2: dict = {"message": msg, "content": json_encoded, "branch": GITHUB_BRANCH}
+        sha2     = await _get_file_sha(s, GITHUB_FILE2)
+        payload2 = {"message": msg, "content": json_encoded, "branch": GITHUB_BRANCH}
         if sha2:
             payload2["sha"] = sha2
 
         async with s.put(url2, headers=headers, json=payload2) as r:
             if r.status not in (200, 201):
-                print(f"[KW] ⚠️ GitHub JSON push failed {r.status}: {(await r.text())[:200]}")
+                print(f"[KW] Warning: GitHub JSON Push Failed {r.status}: {(await r.text())[:200]}")
 
     await refresh_thumb_cache()
 
-# 🌸 ── Fandom Scraper ──────────────────────────────────────────────────────────
+# ── Fandom Scraper ─────────────────────────────────────────────────────────────
 
 async def scrape_fandom_image(pet_name: str) -> tuple[str | None, str]:
     slug     = pet_name.replace(" ", "_")
@@ -307,7 +303,7 @@ async def scrape_fandom_image(pet_name: str) -> tuple[str | None, str]:
                 else:
                     raise Exception(f"Blocked ({r.status})")
         except Exception as e:
-            debug.append(f"Direct Err: {e} → ScraperAPI...")
+            debug.append(f"Direct Error: {e} → ScraperAPI...")
             async with session.get(
                 "https://api.scraperapi.com",
                 params={"api_key": SCRAPER_API_KEY, "url": page_url, "render": "false"},
@@ -336,12 +332,12 @@ async def scrape_fandom_image(pet_name: str) -> tuple[str | None, str]:
             debug.append(f"Infobox: {imgs[0][:100]}")
             return re.sub(r'/revision/latest.*', '', imgs[0]), "\n".join(debug)
 
-        debug.append("No image found in HTML.")
+        debug.append("No Image Found In HTML.")
     return None, "\n".join(debug)
 
-# 🌸 ── /ping ───────────────────────────────────────────────────────────────────
+# ── /ping ──────────────────────────────────────────────────────────────────────
 
-@tree.command(name="ping", description="Check the bot's latency and connection status.")
+@tree.command(name="ping", description="Check The Bot's Latency And Connection Status.")
 async def ping(interaction: discord.Interaction):
     if not await owner_check(interaction): return
     start      = time.monotonic()
@@ -361,15 +357,15 @@ async def ping(interaction: discord.Interaction):
         *footer(),
     )])
 
-# 🌸 ── /addpet ─────────────────────────────────────────────────────────────────
+# ── /addpet ────────────────────────────────────────────────────────────────────
 
-@tree.command(name="addpet", description="Add a new pet with its thumbnail URL to GitHub.")
+@tree.command(name="addpet", description="Add A New Pet With Its Thumbnail URL To GitHub.")
 async def addpet(interaction: discord.Interaction, name: str, url: str):
     if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True)
 
     converted = convert_to_railway(url)
-    label     = "🚂 Railway Proxy — Converted" if converted != url else "📎 Discord CDN — Kept as-is"
+    label     = "🚂 Railway Proxy — Converted" if converted != url else "📎 Discord CDN — Kept As-Is"
 
     try:
         data, sha = await fetch_thumbnails()
@@ -389,12 +385,12 @@ async def addpet(interaction: discord.Interaction, name: str, url: str):
             sep(),
             section(
                 f"🐾 **{name}**\n\n"
-                f"⚠️ Already in GitHub!\n\n"
+                f"⚠️ Already In GitHub!\n\n"
                 f"🔗 **Current URL**\n```\n{shorten(exist, 240)}\n```",
                 exist
             ),
             sep(),
-            txt(f"💡 Use `/updatepet` to change the URL instead.\n🆕 **New URL you tried**\n```\n{shorten(converted, 240)}\n```"),
+            txt(f"💡 Use `/updatepet` To Change The URL Instead.\n🆕 **New URL You Tried**\n```\n{shorten(converted, 240)}\n```"),
             *footer(),
         )])
         return
@@ -413,26 +409,26 @@ async def addpet(interaction: discord.Interaction, name: str, url: str):
             sep(),
             section(f"🐾 **{name}**\n\n{label}\n```\n{shorten(converted)}\n```", converted),
             sep(),
-            txt("📦 **GitHub** — ✅ Pushed & sorted"),
+            txt("📦 **GitHub** — ✅ Pushed & Sorted"),
             *footer(),
         )])
     else:
         await send_v2(interaction, [container(
             txt("## 💥 Failed To Add Pet"),
             sep(),
-            txt(f"🐾 **Pet:** `{name}`\n\n📦 **GitHub** — ❌ Push failed\n```\n{err[:200]}\n```"),
+            txt(f"🐾 **Pet:** `{name}`\n\n📦 **GitHub** — ❌ Push Failed\n```\n{err[:200]}\n```"),
             *footer(),
         )])
 
-# 🌸 ── /updatepet ──────────────────────────────────────────────────────────────
+# ── /updatepet ─────────────────────────────────────────────────────────────────
 
-@tree.command(name="updatepet", description="Update the thumbnail URL of an existing pet.")
+@tree.command(name="updatepet", description="Update The Thumbnail URL Of An Existing Pet.")
 async def updatepet(interaction: discord.Interaction, name: str, url: str):
     if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True)
 
     converted = convert_to_railway(url)
-    label     = "🚂 Railway Proxy — Converted" if converted != url else "📎 Discord CDN — Kept as-is"
+    label     = "🚂 Railway Proxy — Converted" if converted != url else "📎 Discord CDN — Kept As-Is"
 
     try:
         data, sha = await fetch_thumbnails()
@@ -449,7 +445,7 @@ async def updatepet(interaction: discord.Interaction, name: str, url: str):
         suggestions = [k for k in data if name.lower() in k.lower()]
         items = [txt(f"## 🔎 Pet Not Found\n🐾 **Pet:** `{name}`")]
         if suggestions:
-            items += [sep(), txt("**🧩 Similar pets:**\n" + "\n".join(f"• `{s}`" for s in suggestions[:8]))]
+            items += [sep(), txt("**🧩 Similar Pets:**\n" + "\n".join(f"• `{s}`" for s in suggestions[:8]))]
         items += footer()
         await send_v2(interaction, [container(*items)])
         return
@@ -472,20 +468,20 @@ async def updatepet(interaction: discord.Interaction, name: str, url: str):
             sep(),
             txt(f"🔁 **Previous URL**\n```\n{shorten(old_url, 200)}\n```"),
             sep(),
-            txt("📦 **GitHub** — ✅ Pushed & sorted"),
+            txt("📦 **GitHub** — ✅ Pushed & Sorted"),
             *footer(),
         )])
     else:
         await send_v2(interaction, [container(
             txt("## 💥 Failed To Update Pet"),
             sep(),
-            txt(f"🐾 **Pet:** `{name}`\n\n📦 **GitHub** — ❌ Push failed\n```\n{err[:200]}\n```"),
+            txt(f"🐾 **Pet:** `{name}`\n\n📦 **GitHub** — ❌ Push Failed\n```\n{err[:200]}\n```"),
             *footer(),
         )])
 
-# 🌸 ── /deletepet ──────────────────────────────────────────────────────────────
+# ── /deletepet ─────────────────────────────────────────────────────────────────
 
-@tree.command(name="deletepet", description="Delete a pet and its thumbnail URL from GitHub.")
+@tree.command(name="deletepet", description="Delete A Pet And Its Thumbnail URL From GitHub.")
 async def deletepet(interaction: discord.Interaction, name: str):
     if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True)
@@ -505,7 +501,7 @@ async def deletepet(interaction: discord.Interaction, name: str):
         suggestions = [k for k in data if name.lower() in k.lower()]
         items = [txt(f"## 🗑️ Pet Not Found\n🐾 **Pet:** `{name}`")]
         if suggestions:
-            items += [sep(), txt("**🧩 Similar pets:**\n" + "\n".join(f"• `{s}`" for s in suggestions[:8]))]
+            items += [sep(), txt("**🧩 Similar Pets:**\n" + "\n".join(f"• `{s}`" for s in suggestions[:8]))]
         items += footer()
         await send_v2(interaction, [container(*items)])
         return
@@ -526,20 +522,20 @@ async def deletepet(interaction: discord.Interaction, name: str):
             sep(),
             section(f"🐾 **{name}**\n\n🔗 **Deleted URL**\n```\n{shorten(deleted_url, 240)}\n```", deleted_url),
             sep(),
-            txt(f"📦 **GitHub** — ✅ Deleted & sorted\n🔢 **Remaining pets:** {len(data)}"),
+            txt(f"📦 **GitHub** — ✅ Deleted & Sorted\n🔢 **Remaining Pets:** {len(data)}"),
             *footer(),
         )])
     else:
         await send_v2(interaction, [container(
             txt("## 💥 Failed To Delete Pet"),
             sep(),
-            txt(f"🐾 **Pet:** `{name}`\n\n📦 **GitHub** — ❌ Push failed\n```\n{err[:200]}\n```"),
+            txt(f"🐾 **Pet:** `{name}`\n\n📦 **GitHub** — ❌ Push Failed\n```\n{err[:200]}\n```"),
             *footer(),
         )])
 
-# 🌸 ── /getpet ─────────────────────────────────────────────────────────────────
+# ── /getpet ────────────────────────────────────────────────────────────────────
 
-@tree.command(name="getpet", description="Get the thumbnail URL of a specific pet.")
+@tree.command(name="getpet", description="Get The Thumbnail URL Of A Specific Pet.")
 async def getpet(interaction: discord.Interaction, name: str):
     if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True, ephemeral=True)
@@ -559,7 +555,7 @@ async def getpet(interaction: discord.Interaction, name: str):
         suggestions = [k for k in data if name.lower() in k.lower()]
         items = [txt(f"## 🔍 Pet Not Found\n🐾 **Pet:** `{name}`")]
         if suggestions:
-            items += [sep(), txt("**💡 Did you mean:**\n" + "\n".join(f"• `{s}`" for s in suggestions[:5]))]
+            items += [sep(), txt("**💡 Did You Mean:**\n" + "\n".join(f"• `{s}`" for s in suggestions[:5]))]
         items += footer()
         await send_v2_eph(interaction, [container(*items)])
         return
@@ -572,9 +568,9 @@ async def getpet(interaction: discord.Interaction, name: str):
         *footer(),
     )])
 
-# 🌸 ── /searchpet ──────────────────────────────────────────────────────────────
+# ── /searchpet ─────────────────────────────────────────────────────────────────
 
-@tree.command(name="searchpet", description="Search for pets by name or keyword.")
+@tree.command(name="searchpet", description="Search For Pets By Name Or Keyword.")
 async def searchpet(interaction: discord.Interaction, query: str):
     if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True, ephemeral=True)
@@ -608,14 +604,14 @@ async def searchpet(interaction: discord.Interaction, query: str):
     ]
     if len(matches) > 1:
         others = matches[1:26]
-        items += [sep(), txt(f"**📋 Other matches ({len(matches) - 1}):**\n" + "\n".join(f"• `{m}`" for m in others))]
-    items += [sep(), txt(f"🔢 **Total matches:** {len(matches)} / {len(data)} pets")]
+        items += [sep(), txt(f"**📋 Other Matches ({len(matches) - 1}):**\n" + "\n".join(f"• `{m}`" for m in others))]
+    items += [sep(), txt(f"🔢 **Total Matches:** {len(matches)} / {len(data)} Pets")]
     items += footer()
     await send_v2_eph(interaction, [container(*items)])
 
-# 🌸 ── /listpets ───────────────────────────────────────────────────────────────
+# ── /listpets ──────────────────────────────────────────────────────────────────
 
-@tree.command(name="listpets", description="List all pets and their thumbnails stored in GitHub.")
+@tree.command(name="listpets", description="List All Pets And Their Thumbnails Stored In GitHub.")
 async def listpets(interaction: discord.Interaction):
     if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True, ephemeral=True)
@@ -653,7 +649,7 @@ async def listpets(interaction: discord.Interaction):
                         await asyncio.sleep(float(retry_after) + 0.2)
                         continue
                     raise Exception(f"Discord {r.status}: {body[:200]}")
-        raise Exception("Rate limited — max retries exceeded")
+        raise Exception("Rate Limited — Max Retries Exceeded")
 
     await post_followup([container(
         txt("## 📋 Full Pet List"),
@@ -665,48 +661,41 @@ async def listpets(interaction: discord.Interaction):
             f"🔗 **Other:** {other_count}"
         ),
         sep_sm(),
-        txt("**🌸 All Pets — Loading thumbnails below...**"),
+        txt("**🌸 All Pets — Loading Thumbnails Below...**"),
     )])
 
+    # Fixed: one divider between pets only, no extra dividers
     for i in range(0, len(pet_names), 5):
         chunk = pet_names[i:i + 5]
         items = [txt(f"**🐾 Pets ({i + 1}–{i + len(chunk)}):**")]
-        for j, pname in enumerate(chunk):
-            if j > 0:
-                items.append(sep())
+        for pname in chunk:
+            items.append(sep())
             items.append(section(f"**{pname}**", data[pname]))
-        interleaved = []
-        for idx, item in enumerate(items):
-            if idx > 0:
-                interleaved.append({"type": 14, "divider": True, "spacing": 1})
-            interleaved.append(item)
-        await post_followup([{"type": 17, "accent_color": 3092790, "components": interleaved}])
+        await post_followup([{"type": 17, "accent_color": PINK, "components": items}])
         await asyncio.sleep(0.8)
 
     await post_followup([container(
-        txt(f"✅ **Done — {len(pet_names)} pets listed.**"),
+        txt(f"✅ **Done — {len(pet_names)} Pets Listed.**"),
         *footer(),
     )])
 
-# 🌸 ── /fetchpet ───────────────────────────────────────────────────────────────
+# ── /fetchpet ──────────────────────────────────────────────────────────────────
 
-@tree.command(name="fetchpet", description="Auto-fetch a pet's image from the Fandom wiki and save it.")
+@tree.command(name="fetchpet", description="Auto-Fetch A Pet's Image From The Fandom Wiki And Save It.")
 async def fetchpet(interaction: discord.Interaction, name: str):
     if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True, ephemeral=True)
 
-    wh_url = webhook_url(interaction)
+    wh_url   = webhook_url(interaction)
+    orig_url = f"{wh_url}/messages/@original"
 
-    # Gửi trạng thái đang scrape để tránh timeout
     async with aiohttp.ClientSession() as s:
         await s.post(wh_url, json={"flags": FLAGS_V2_EPH, "components": [container(
-            txt(f"## 🔍 Đang tìm ảnh..."),
+            txt("## 🔍 Fetching Image..."),
             sep(),
-            txt(f"🐾 **Pet:** `{name}`\n\n⏳ Đang scrape Fandom wiki, vui lòng chờ..."),
+            txt(f"🐾 **Pet:** `{name}`\n\n⏳ Scraping Fandom Wiki, Please Wait..."),
             *footer(),
         )]})
-
-    orig_url = f"{wh_url}/messages/@original"
 
     async def update(components):
         async with aiohttp.ClientSession() as s:
@@ -718,7 +707,7 @@ async def fetchpet(interaction: discord.Interaction, name: str):
         await update([container(
             txt("## ⏰ Scrape Timeout"),
             sep(),
-            txt(f"🐾 **Pet:** `{name}`\n\n❌ Fandom wiki không phản hồi sau 35 giây.\n\n💡 Thử lại sau hoặc dùng `/addpet` để thêm URL thủ công."),
+            txt(f"🐾 **Pet:** `{name}`\n\n❌ Fandom Wiki Did Not Respond After 35 Seconds.\n\n💡 Try Again Later Or Use `/addpet` To Add URL Manually."),
             *footer(),
         )])
         return
@@ -738,10 +727,10 @@ async def fetchpet(interaction: discord.Interaction, name: str):
             sep(),
             txt(
                 f"🐾 **Pet:** `{name}`\n\n"
-                f"❌ No image found on the wiki page.\n\n"
-                f"🌐 **Page checked:**\n```\n{page_url}\n```\n\n"
-                f"💡 Make sure the pet name matches the wiki page title exactly.\n\n"
-                f"🛠️ **Debug info:**\n```\n{debug_info[:600]}\n```"
+                f"❌ No Image Found On The Wiki Page.\n\n"
+                f"🌐 **Page Checked:**\n```\n{page_url}\n```\n\n"
+                f"💡 Make Sure The Pet Name Matches The Wiki Page Title Exactly.\n\n"
+                f"🛠️ **Debug Info:**\n```\n{debug_info[:600]}\n```"
             ),
             *footer(),
         )])
@@ -763,29 +752,24 @@ async def fetchpet(interaction: discord.Interaction, name: str):
 
     if name in data:
         existing_url = data[name]
-        payload = {
-            "flags": FLAGS_V2_EPH,
-            "components": [
-                container(
-                    txt("## 🚧 Pet Already Exists"),
-                    sep(),
-                    section(
-                        f"🐾 **{name}**\n\n"
-                        f"⚠️ Already in GitHub — Overwrite?\n\n"
-                        f"🔗 **Current URL**\n```\n{shorten(existing_url)}\n```\n\n"
-                        f"🌐 **Fetched URL**\n```\n{short_url}\n```",
-                        existing_url
-                    ),
-                    *footer(),
+        await update([
+            container(
+                txt("## 🚧 Pet Already Exists"),
+                sep(),
+                section(
+                    f"🐾 **{name}**\n\n"
+                    f"⚠️ Already In GitHub — Overwrite?\n\n"
+                    f"🔗 **Current URL**\n```\n{shorten(existing_url)}\n```\n\n"
+                    f"🌐 **Fetched URL**\n```\n{short_url}\n```",
+                    existing_url
                 ),
-                action_row(
-                    button("✅ Yes — Overwrite",    f"overwrite_yes:{name}", style=3),
-                    button("❌ No — Keep Existing", f"overwrite_no:{name}",  style=4),
-                ),
-            ],
-        }
-        await update(payload["components"])
-
+                *footer(),
+            ),
+            action_row(
+                button("✅ Yes — Overwrite",    f"overwrite_yes:{name}", style=3),
+                button("❌ No — Keep Existing", f"overwrite_no:{name}",  style=4),
+            ),
+        ])
         bot._fetchpet_pending       = getattr(bot, "_fetchpet_pending", {})
         bot._fetchpet_pending[name] = {"railway_url": railway_url, "data": data, "sha": sha}
         return
@@ -804,20 +788,20 @@ async def fetchpet(interaction: discord.Interaction, name: str):
             sep(),
             section(f"🐾 **{name}**\n\n🚂 **Railway URL**\n```\n{short_url}\n```", railway_url),
             sep(),
-            txt("📦 **GitHub** — ✅ Pushed & sorted"),
+            txt("📦 **GitHub** — ✅ Pushed & Sorted"),
             *footer(),
         )])
     else:
         await update([container(
             txt("## 💥 Failed To Save Pet"),
             sep(),
-            txt(f"🐾 **Pet:** `{name}`\n\n📦 **GitHub** — ❌ Push failed\n```\n{err[:200]}\n```"),
+            txt(f"🐾 **Pet:** `{name}`\n\n📦 **GitHub** — ❌ Push Failed\n```\n{err[:200]}\n```"),
             *footer(),
         )])
 
-# 🌸 ── /syncpets ───────────────────────────────────────────────────────────────
+# ── /syncpets ──────────────────────────────────────────────────────────────────
 
-@tree.command(name="syncpets", description="Sync all pet URLs to Railway proxy format.")
+@tree.command(name="syncpets", description="Sync All Pet URLs To Railway Proxy Format.")
 async def syncpets(interaction: discord.Interaction):
     if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True)
@@ -850,23 +834,19 @@ async def syncpets(interaction: discord.Interaction):
         await send_v2(interaction, [container(
             txt("## ✅ Already Fully Synced"),
             sep(),
-            txt(
-                f"🐾 **Total Pets:** {len(data)}\n\n"
-                f"🚂 All URLs are already on Railway!\n\n"
-                f"Nothing to sync."
-            ),
+            txt(f"🐾 **Total Pets:** {len(data)}\n\n🚂 All URLs Are Already On Railway!\n\nNothing To Sync."),
             *footer(),
         )])
         return
 
     preview_names = sorted(needs_sync.keys())[:10]
     preview_lines = "\n".join(
-        f"• `{n}`{' *(re-fetch from wiki)*' if n in to_refetch else ''}"
+        f"• `{n}`{' *(Re-Fetch From Wiki)*' if n in to_refetch else ''}"
         for n in preview_names
     )
-    more_note    = f"\n*...And {len(needs_sync) - 10} more*" if len(needs_sync) > 10 else ""
+    more_note    = f"\n*...And {len(needs_sync) - 10} More*" if len(needs_sync) > 10 else ""
     refetch_note = (
-        f"\n\n⚠️ **{len(to_refetch)} pet(s) with non-wikia URLs will be re-fetched from the wiki.**"
+        f"\n\n⚠️ **{len(to_refetch)} Pet(s) With Non-Wikia URLs Will Be Re-Fetched From The Wiki.**"
         if to_refetch else ""
     )
 
@@ -879,9 +859,9 @@ async def syncpets(interaction: discord.Interaction):
                 sep(),
                 txt(
                     f"🐾 **Total Pets:** {len(data)}\n"
-                    f"⚠️ **Found {len(needs_sync)} pet(s) not on Railway:**\n\n"
+                    f"⚠️ **Found {len(needs_sync)} Pet(s) Not On Railway:**\n\n"
                     f"{preview_lines}{more_note}{refetch_note}\n\n"
-                    f"Convert all to Railway proxy?"
+                    f"Convert All To Railway Proxy?"
                 ),
                 *footer(),
             ),
@@ -899,7 +879,7 @@ async def syncpets(interaction: discord.Interaction):
     bot._syncpets_pending           = getattr(bot, "_syncpets_pending", {})
     bot._syncpets_pending["latest"] = {"data": data, "sha": sha, "to_convert": to_convert, "to_refetch": to_refetch}
 
-# 🌸 ── Button Handlers ─────────────────────────────────────────────────────────
+# ── Button Handlers ────────────────────────────────────────────────────────────
 
 def progress_bar(done: int, total: int, width: int = 20) -> str:
     pct    = done / total if total else 1
@@ -919,14 +899,12 @@ async def on_interaction(interaction: discord.Interaction):
         async with aiohttp.ClientSession() as s:
             await s.patch(orig_url, json={"flags": FLAGS_V2, "components": components})
 
-    # 🌸 Steal — Yes / No confirm
+    # ── Steal Confirm Yes / No ─────────────────────────────────────────────────
 
     if custom_id.startswith("steal_confirm_yes:") or custom_id.startswith("steal_confirm_no:"):
         did    = custom_id.split(":")[1]
         action = "yes" if custom_id.startswith("steal_confirm_yes") else "no"
-
         await interaction.response.defer()
-
         pending = getattr(bot, "_pending_steal", {}).get(did)
 
         if action == "no" or not pending:
@@ -934,22 +912,19 @@ async def on_interaction(interaction: discord.Interaction):
                 await s.patch(orig_url, json={"flags": FLAGS_V2_EPH, "components": [container(
                     txt("## ❌ Cancelled"),
                     sep(),
-                    txt("No changes were made. Current registration is kept."),
+                    txt("No Changes Were Made. Current Registration Is Kept."),
                     *footer(),
                 )]})
         else:
             key        = pending["key"]
             roblox_str = pending["roblox_user"]
-
             old_roblox = discord_map.get(did)
             if old_roblox:
                 user_map.pop(old_roblox, None)
-
             user_map[key]    = did
             discord_map[did] = key
             _save_data()
             getattr(bot, "_pending_steal", {}).pop(did, None)
-
             async with aiohttp.ClientSession() as s:
                 await s.patch(orig_url, json={"flags": FLAGS_V2_EPH, "components": [container(
                     txt("## ✅ Registration Updated"),
@@ -957,13 +932,13 @@ async def on_interaction(interaction: discord.Interaction):
                     txt(
                         f"🎮 **New Roblox:** `{roblox_str}`\n"
                         f"🆔 **Discord:** <@{did}>\n\n"
-                        f"🔄 Username successfully changed."
+                        f"🔄 Username Successfully Changed."
                     ),
                     *footer(),
                 )]})
         return
 
-    # 🌸 Mypets — Prev / Next pagination
+    # ── Mypets Pagination ──────────────────────────────────────────────────────
 
     if custom_id.startswith("mypets_prev:") or custom_id.startswith("mypets_next:"):
         parts      = custom_id.split(":")
@@ -971,37 +946,32 @@ async def on_interaction(interaction: discord.Interaction):
         discord_id = parts[1]
         cur_page   = int(parts[2])
         new_page   = cur_page - 1 if action == "mypets_prev" else cur_page + 1
-
         await interaction.response.defer()
-
         cache    = getattr(bot, "_mypets_pages", {}).get(discord_id)
         logs     = cache["logs"] if isinstance(cache, dict) else cache or []
         username = cache.get("username", "") if isinstance(cache, dict) else ""
         if not logs:
-            await interaction.followup.send("⚠️ Session expired — please run `/mypets` again.", ephemeral=True)
+            await interaction.followup.send("⚠️ Session Expired — Please Run `/mypets` Again.", ephemeral=True)
             return
-
         components = build_mypets_page(logs, new_page, discord_id, username)
         async with aiohttp.ClientSession() as s:
             await s.patch(orig_url, json={"flags": FLAGS_V2_EPH, "components": components})
         return
 
-    # 🌸 Fetchpet — Overwrite Yes
+    # ── Fetchpet Overwrite Yes ─────────────────────────────────────────────────
 
     if custom_id.startswith("overwrite_yes:"):
         pet_name = custom_id[len("overwrite_yes:"):]
         info     = getattr(bot, "_fetchpet_pending", {}).pop(pet_name, None)
         if not info:
-            await interaction.response.send_message("⚠️ Session expired.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Session Expired.", ephemeral=True)
             return
         await interaction.response.defer()
-
         railway_url = info["railway_url"]
         data        = info["data"]
         sha         = info["sha"]
         old_url     = data.get(pet_name, "")
         short_url   = shorten(railway_url)
-
         try:
             data[pet_name] = railway_url
             await push_thumbnails(data, sha, f"[KW] Auto-Fetch Updated: {pet_name}")
@@ -1009,7 +979,6 @@ async def on_interaction(interaction: discord.Interaction):
         except Exception as e:
             ok  = False
             err = str(e)
-
         if ok:
             extra = f"\n\n🔁 **Previous URL**\n```\n{shorten(old_url, 200)}\n```" if old_url else ""
             await patch_orig([container(
@@ -1017,18 +986,18 @@ async def on_interaction(interaction: discord.Interaction):
                 sep(),
                 section(f"🐾 **{pet_name}**\n\n🚂 **Railway URL**\n```\n{short_url}\n```{extra}", railway_url),
                 sep(),
-                txt("📦 **GitHub** — ✅ Pushed & sorted"),
+                txt("📦 **GitHub** — ✅ Pushed & Sorted"),
                 *footer(),
             )])
         else:
             await patch_orig([container(
                 txt("## 💥 Failed To Save Pet"),
                 sep(),
-                txt(f"🐾 **Pet:** `{pet_name}`\n\n📦 **GitHub** — ❌ Push failed\n```\n{err[:200]}\n```"),
+                txt(f"🐾 **Pet:** `{pet_name}`\n\n📦 **GitHub** — ❌ Push Failed\n```\n{err[:200]}\n```"),
                 *footer(),
             )])
 
-    # 🌸 Fetchpet — Overwrite No
+    # ── Fetchpet Overwrite No ──────────────────────────────────────────────────
 
     elif custom_id.startswith("overwrite_no:"):
         pet_name = custom_id[len("overwrite_no:"):]
@@ -1039,28 +1008,26 @@ async def on_interaction(interaction: discord.Interaction):
             txt("## 🚫 Overwrite Cancelled"),
             sep(),
             section(
-                f"🐾 **{pet_name}**\n\n🔗 **Kept existing URL**\n```\n{shorten(exist)}\n```",
+                f"🐾 **{pet_name}**\n\n🔗 **Kept Existing URL**\n```\n{shorten(exist)}\n```",
                 exist
-            ) if exist else txt(f"🐾 **{pet_name}** — Kept existing entry."),
+            ) if exist else txt(f"🐾 **{pet_name}** — Kept Existing Entry."),
             *footer(),
         )])
 
-    # 🌸 Syncpets — Yes
+    # ── Syncpets Yes ───────────────────────────────────────────────────────────
 
     elif custom_id == "syncpets_yes":
         pending = getattr(bot, "_syncpets_pending", {}).pop("latest", None)
         if not pending:
-            await interaction.response.send_message("⚠️ Session expired.", ephemeral=True)
+            await interaction.response.send_message("⚠️ Session Expired.", ephemeral=True)
             return
         await interaction.response.defer()
-
         data       = pending["data"]
         sha        = pending["sha"]
         to_convert = pending["to_convert"]
         to_refetch = pending["to_refetch"]
         total      = len(to_convert) + len(to_refetch)
         done       = 0
-
         converted_list = []
         failed_list    = []
 
@@ -1090,13 +1057,13 @@ async def on_interaction(interaction: discord.Interaction):
                     data[cname] = convert_to_railway(wikia_url)
                     converted_list.append(cname)
                 else:
-                    failed_list.append(f"{cname}: Wiki image not found")
+                    failed_list.append(f"{cname}: Wiki Image Not Found")
             except Exception as ce:
                 failed_list.append(f"{cname}: {ce}")
             done += 1
 
         try:
-            await push_thumbnails(data, sha, f"[KW] SyncPets: Converted {len(converted_list)} URLs to Railway")
+            await push_thumbnails(data, sha, f"[KW] SyncPets: Converted {len(converted_list)} URLs To Railway")
             push_ok  = True
             push_err = ""
         except Exception as pe:
@@ -1105,7 +1072,7 @@ async def on_interaction(interaction: discord.Interaction):
 
         if push_ok:
             preview  = "\n".join(f"• `{n}`" for n in sorted(converted_list)[:20])
-            more     = f"\n*...And {len(converted_list) - 20} more*" if len(converted_list) > 20 else ""
+            more     = f"\n*...And {len(converted_list) - 20} More*" if len(converted_list) > 20 else ""
             fail_txt = (
                 f"\n\n⚠️ **Failed ({len(failed_list)}):**\n" + "\n".join(f"• {x}" for x in failed_list[:5])
                 if failed_list else ""
@@ -1114,9 +1081,9 @@ async def on_interaction(interaction: discord.Interaction):
                 txt("## 🚂 Sync Complete!"),
                 sep(),
                 txt(
-                    f"✅ **Converted {len(converted_list)} pet(s) to Railway:**\n\n"
+                    f"✅ **Converted {len(converted_list)} Pet(s) To Railway:**\n\n"
                     f"{preview}{more}{fail_txt}\n\n"
-                    f"📦 **GitHub** — ✅ Pushed & sorted"
+                    f"📦 **GitHub** — ✅ Pushed & Sorted"
                 ),
                 *footer(),
             )])
@@ -1124,11 +1091,11 @@ async def on_interaction(interaction: discord.Interaction):
             await patch_orig([container(
                 txt("## 💥 Sync Failed"),
                 sep(),
-                txt(f"📦 **GitHub push failed:**\n```\n{push_err[:300]}\n```"),
+                txt(f"📦 **GitHub Push Failed:**\n```\n{push_err[:300]}\n```"),
                 *footer(),
             )])
 
-    # 🌸 Syncpets — No
+    # ── Syncpets No ────────────────────────────────────────────────────────────
 
     elif custom_id == "syncpets_no":
         getattr(bot, "_syncpets_pending", {}).pop("latest", None)
@@ -1136,30 +1103,29 @@ async def on_interaction(interaction: discord.Interaction):
         await patch_orig([container(
             txt("## 🚫 Sync Cancelled"),
             sep(),
-            txt("No changes were made to GitHub."),
+            txt("No Changes Were Made To GitHub."),
             *footer(),
         )])
 
-# 🌸 ── /steal ──────────────────────────────────────────────────────────────────
+# ── /steal ─────────────────────────────────────────────────────────────────────
 
-@tree.command(name="steal", description="Register a Roblox username and Discord ID for a stealer.")
+@tree.command(name="steal", description="Register Your Roblox Username To Your Discord Account.")
 @discord.app_commands.describe(
-    roblox_user = "Roblox username of the stealer",
-    discord_id  = "Discord ID (numbers only) of the stealer",
+    roblox_user = "Your Roblox Username",
+    discord_id  = "Your Discord ID (Numbers Only)",
 )
 async def steal_cmd(
     interaction: discord.Interaction,
     roblox_user: str,
     discord_id:  str,
 ):
-    if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True, ephemeral=True)
 
     if not discord_id.strip().isdigit():
         await send_v2_eph(interaction, [container(
             txt("## ❌ Invalid Discord ID"),
             sep(),
-            txt(f"Discord ID must be numbers only.\n**You entered:** `{discord_id}`"),
+            txt(f"Discord ID Must Be Numbers Only.\n**You Entered:** `{discord_id}`"),
             *footer(),
         )])
         return
@@ -1167,12 +1133,20 @@ async def steal_cmd(
     key = roblox_user.strip().lower()
     did = discord_id.strip()
 
+    if str(interaction.user.id) != did and interaction.user.id != OWNER_ID:
+        await send_v2_eph(interaction, [container(
+            txt("## ❌ Access Denied"),
+            sep(),
+            txt("You Can Only Register Your Own Discord ID."),
+            *footer(),
+        )])
+        return
+
     roblox_already_linked = key in user_map
     discord_already_has   = did in discord_map
     same_roblox_same_did  = roblox_already_linked and user_map[key] == did
     same_did_diff_roblox  = discord_already_has and discord_map[did] != key
-
-    wh_url = webhook_url(interaction)
+    wh_url                = webhook_url(interaction)
 
     if same_roblox_same_did:
         await send_v2_eph(interaction, [container(
@@ -1181,7 +1155,7 @@ async def steal_cmd(
             txt(
                 f"🎮 **Roblox:** `{roblox_user.strip()}`\n"
                 f"🆔 **Discord:** <@{did}>\n\n"
-                f"This mapping is already active. No changes made."
+                f"This Mapping Is Already Active. No Changes Made."
             ),
             *footer(),
         )])
@@ -1189,37 +1163,23 @@ async def steal_cmd(
 
     if same_did_diff_roblox:
         old_roblox = discord_map[did]
-
         if not hasattr(bot, "_pending_steal"):
             bot._pending_steal = {}
         bot._pending_steal[did] = {"key": key, "roblox_user": roblox_user.strip(), "did": did}
-
         confirm_components = [container(
             txt("## ⚠️ Discord Already Registered"),
             sep(),
             txt(
-                f"<@{did}> is already linked to `{old_roblox}`\n\n"
-                f"Do you want to change it to `{roblox_user.strip()}`?"
+                f"<@{did}> Is Already Linked To `{old_roblox}`\n\n"
+                f"Do You Want To Change It To `{roblox_user.strip()}`?"
             ),
             sep(),
-            {
-                "type": 1,
-                "components": [
-                    {
-                        "type": 2, "style": 3,
-                        "label": "✅  Yes, change it",
-                        "custom_id": f"steal_confirm_yes:{did}",
-                    },
-                    {
-                        "type": 2, "style": 4,
-                        "label": "❌  No, keep current",
-                        "custom_id": f"steal_confirm_no:{did}",
-                    },
-                ],
-            },
+            action_row(
+                button("✅ Yes, Change It",   f"steal_confirm_yes:{did}", style=3),
+                button("❌ No, Keep Current", f"steal_confirm_no:{did}",  style=4),
+            ),
             *footer(),
         )]
-
         async with aiohttp.ClientSession() as s:
             await s.post(wh_url, json={"flags": FLAGS_V2_EPH, "components": confirm_components})
         return
@@ -1232,7 +1192,7 @@ async def steal_cmd(
     discord_map[did] = key
     _save_data()
 
-    status = "🔄 **Updated** — Roblox username changed." if roblox_already_linked else "✅ **Newly registered**"
+    status = "🔄 **Updated** — Roblox Username Changed." if roblox_already_linked else "✅ **Newly Registered**"
 
     await send_v2_eph(interaction, [container(
         txt("## 👤 Stealer Registered"),
@@ -1245,14 +1205,14 @@ async def steal_cmd(
         *footer(),
     )])
 
-# 🌸 ── /mypets ─────────────────────────────────────────────────────────────────
+# ── /mypets ────────────────────────────────────────────────────────────────────
 
 PAGE_SIZE = 5
 
 def _parse_value(val: str) -> float:
     try:
-        v = val.replace("$","").replace(",","").strip()
-        for suffix, exp in [("B/s",1e9),("M/s",1e6),("K/s",1e3),("B",1e9),("M",1e6),("K",1e3)]:
+        v = val.replace("$", "").replace(",", "").strip()
+        for suffix, exp in [("B/s", 1e9), ("M/s", 1e6), ("K/s", 1e3), ("B", 1e9), ("M", 1e6), ("K", 1e3)]:
             if v.endswith(suffix):
                 return float(v[:-len(suffix)]) * exp
         return float(v)
@@ -1265,8 +1225,6 @@ def _fmt_value(n: float) -> str:
     if n >= 1e3: return f"{n/1e3:.2f}K".rstrip("0").rstrip(".")
     return str(int(n))
 
-PINK = 16758725  # 0xFFB7C5 sakura pink
-
 def build_mypets_page(logs: list[dict], page: int, discord_id: str, username: str = "") -> list[dict]:
     total_pages  = max(1, -(-len(logs) // PAGE_SIZE))
     start        = page * PAGE_SIZE
@@ -1274,7 +1232,6 @@ def build_mypets_page(logs: list[dict], page: int, discord_id: str, username: st
     total_steals = len(logs)
     total_val    = sum(_parse_value(e["value"]) for e in logs if e.get("value"))
     val_str      = _fmt_value(total_val)
-
     display_name = f"@{username}" if username else f"<@{discord_id}>"
 
     header_text = (
@@ -1324,16 +1281,15 @@ def build_mypets_page(logs: list[dict], page: int, discord_id: str, username: st
         "disabled": page >= total_pages - 1,
     }
     btn_row = {"type": 1, "components": [prev_btn, next_btn]}
-
     return [container_block, btn_row]
 
 
-@tree.command(name="mypets", description="View your stolen pets with pagination.")
+@tree.command(name="mypets", description="View Your Stolen Pets With Pagination.")
 async def mypets_cmd(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
 
     discord_id = str(interaction.user.id)
-    logs = [e for e in steal_log if e.get("discord_id") == discord_id]
+    logs       = [e for e in steal_log if e.get("discord_id") == discord_id]
 
     if not logs:
         wh_url = webhook_url(interaction)
@@ -1344,8 +1300,8 @@ async def mypets_cmd(interaction: discord.Interaction):
                     txt("## 📋 No Steals Found"),
                     sep(),
                     txt(
-                        f"No stolen pets recorded for <@{discord_id}> yet.\n"
-                        "Make sure your Roblox username is registered with `/steal`."
+                        f"No Stolen Pets Recorded For <@{discord_id}> Yet.\n"
+                        "Make Sure Your Roblox Username Is Registered With `/steal`."
                     ),
                     *footer(),
                 )],
@@ -1354,29 +1310,103 @@ async def mypets_cmd(interaction: discord.Interaction):
 
     if not hasattr(bot, "_mypets_pages"):
         bot._mypets_pages = {}
-    username = interaction.user.display_name
+    username                      = interaction.user.display_name
     bot._mypets_pages[discord_id] = {"logs": logs, "username": username}
 
     components = build_mypets_page(logs, 0, discord_id, username)
-    wh_url = webhook_url(interaction)
+    wh_url     = webhook_url(interaction)
     async with aiohttp.ClientSession() as s:
         await s.post(wh_url, json={"flags": FLAGS_V2_EPH, "components": components})
 
-# 🌸 ── /stealclear ─────────────────────────────────────────────────────────────
+# ── /stealclear ────────────────────────────────────────────────────────────────
 
-@tree.command(name="stealclear", description="Clear all steal history for this session.")
-async def stealclear_cmd(interaction: discord.Interaction):
+@tree.command(name="stealclear", description="Clear Steal History For A Specific User Or All Users. (Owner Only)")
+@discord.app_commands.describe(
+    discord_id = "Discord ID Of The User To Clear (Leave Empty To Clear All)"
+)
+async def stealclear_cmd(interaction: discord.Interaction, discord_id: str = None):
     if not await owner_check(interaction): return
-    count = len(steal_log)
-    steal_log.clear()
-    _save_data()
-    await interaction.response.send_message(
-        f"🗑️ Cleared `{count}` steal records.", ephemeral=True
-    )
+    await interaction.response.defer(thinking=True, ephemeral=True)
 
-# 🌸 ── /stealusers ─────────────────────────────────────────────────────────────
+    if discord_id:
+        if not discord_id.strip().isdigit():
+            await send_v2_eph(interaction, [container(
+                txt("## ❌ Invalid Discord ID"),
+                sep(),
+                txt(f"Discord ID Must Be Numbers Only.\n**You Entered:** `{discord_id}`"),
+                *footer(),
+            )])
+            return
 
-@tree.command(name="stealusers", description="View all registered Roblox → Discord mappings.")
+        did     = discord_id.strip()
+        removed = [e for e in steal_log if e.get("discord_id") == did]
+        steal_log[:] = [e for e in steal_log if e.get("discord_id") != did]
+        _save_data()
+
+        await send_v2_eph(interaction, [container(
+            txt("## 🗑️ User History Cleared"),
+            sep(),
+            txt(
+                f"🆔 **User:** <@{did}>\n"
+                f"🗑️ **Removed:** `{len(removed)}` Records\n"
+                f"📋 **Remaining Total:** `{len(steal_log)}` Records"
+            ),
+            *footer(),
+        )])
+    else:
+        count = len(steal_log)
+        steal_log.clear()
+        _save_data()
+        await send_v2_eph(interaction, [container(
+            txt("## 🗑️ All History Cleared"),
+            sep(),
+            txt(f"🗑️ **Removed:** `{count}` Records\n📋 **Remaining:** `0` Records"),
+            *footer(),
+        )])
+
+# ── /viewsteals ────────────────────────────────────────────────────────────────
+
+@tree.command(name="viewsteals", description="View Steal History Of Any User. (Owner Only)")
+@discord.app_commands.describe(
+    discord_id = "Discord ID Of The User To View"
+)
+async def viewsteals_cmd(interaction: discord.Interaction, discord_id: str):
+    if not await owner_check(interaction): return
+    await interaction.response.defer(thinking=True, ephemeral=True)
+
+    if not discord_id.strip().isdigit():
+        await send_v2_eph(interaction, [container(
+            txt("## ❌ Invalid Discord ID"),
+            sep(),
+            txt(f"Discord ID Must Be Numbers Only.\n**You Entered:** `{discord_id}`"),
+            *footer(),
+        )])
+        return
+
+    did  = discord_id.strip()
+    logs = [e for e in steal_log if e.get("discord_id") == did]
+
+    if not logs:
+        await send_v2_eph(interaction, [container(
+            txt("## 📋 No Steals Found"),
+            sep(),
+            txt(f"No Stolen Pets Recorded For <@{did}>."),
+            *footer(),
+        )])
+        return
+
+    if not hasattr(bot, "_mypets_pages"):
+        bot._mypets_pages = {}
+    bot._mypets_pages[did] = {"logs": logs, "username": did}
+
+    components = build_mypets_page(logs, 0, did)
+    wh_url     = webhook_url(interaction)
+    async with aiohttp.ClientSession() as s:
+        await s.post(wh_url, json={"flags": FLAGS_V2_EPH, "components": components})
+
+# ── /stealusers ────────────────────────────────────────────────────────────────
+
+@tree.command(name="stealusers", description="View All Registered Roblox → Discord Mappings. (Owner Only)")
 async def stealusers_cmd(interaction: discord.Interaction):
     if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True, ephemeral=True)
@@ -1385,7 +1415,7 @@ async def stealusers_cmd(interaction: discord.Interaction):
         await send_v2_eph(interaction, [container(
             txt("## 👥 No Users Registered"),
             sep(),
-            txt("No one registered yet.\nUse `/steal` to link a Roblox username to a Discord ID."),
+            txt("No One Registered Yet.\nUse `/steal` To Link A Roblox Username To A Discord ID."),
             *footer(),
         )])
         return
@@ -1397,11 +1427,11 @@ async def stealusers_cmd(interaction: discord.Interaction):
     await send_v2_eph(interaction, [container(
         txt("## 👥 Registered Stealers"),
         sep(),
-        txt(f"📋 **Total:** `{len(user_map)}` users\n\n{lines}"),
+        txt(f"📋 **Total:** `{len(user_map)}` Users\n\n{lines}"),
         *footer(),
     )])
 
-# 🌸 ── HTTP endpoint nhận thông báo từ Lua script ─────────────────────────────
+# ── HTTP Endpoint ──────────────────────────────────────────────────────────────
 
 async def handle_steal_notify(request):
     try:
@@ -1420,8 +1450,6 @@ async def handle_steal_notify(request):
         ts          = int(time.time())
         og          = is_og(pet_name)
         img_url     = data.get("img_url") or pet_img(pet_name)
-        color       = 16753920 if og else 3092790
-
         discord_id  = user_map.get(roblox_user.lower())
         stolen_by   = f"<@{discord_id}>" if discord_id else f"@{roblox_user}"
 
@@ -1439,49 +1467,41 @@ async def handle_steal_notify(request):
         channel_id = int(STEAL_CHANNEL)
         if not channel_id:
             from aiohttp.web import Response
-            return Response(status=200, text="No channel configured")
+            return Response(status=200, text="No Channel Configured")
 
         payload = {
             "flags": FLAGS_V2,
-            "components": [
-                {
-                    "type": 17,
-                    "accent_color": PINK,
-                    "components": [
-                        {"type": 10, "content": "# 🌸 Kawaiifu Notifier | Steals 🌸"},
-                        {"type": 14, "divider": True, "spacing": 1},
-                        {
-                            "type": 9,
-                            "components": [{
-                                "type":    10,
-                                "content": (
-                                    f"### 🪨 {pet_name}  {value}\n"
-                                    f"Stolen by: {stolen_by}"
-                                ),
-                            }],
-                            "accessory": {
-                                "type":    11,
-                                "media":   {"url": img_url, "loading_state": 2},
-                                "spoiler": False,
-                            },
+            "components": [{
+                "type":         17,
+                "accent_color": PINK,
+                "components": [
+                    {"type": 10, "content": "# 🌸 Kawaiifu Notifier | Steals 🌸"},
+                    {"type": 14, "divider": True, "spacing": 1},
+                    {
+                        "type": 9,
+                        "components": [{"type": 10, "content": (
+                            f"### 🪨 {pet_name}  {value}\n"
+                            f"Stolen By: {stolen_by}"
+                        )}],
+                        "accessory": {
+                            "type":    11,
+                            "media":   {"url": img_url, "loading_state": 2},
+                            "spoiler": False,
                         },
-                        {"type": 14, "divider": True, "spacing": 1},
-                        {"type": 10, "content": f"-# Steal Detected | <t:{ts}:F>"},
-                        {"type": 14, "divider": True, "spacing": 1},
-                        {"type": 10, "content": make_footer()},
-                    ],
-                }
-            ],
+                    },
+                    {"type": 14, "divider": True, "spacing": 1},
+                    {"type": 10, "content": f"-# Steal Detected | <t:{ts}:F>"},
+                    {"type": 14, "divider": True, "spacing": 1},
+                    {"type": 10, "content": make_footer()},
+                ],
+            }],
         }
 
         async with aiohttp.ClientSession() as s:
             async with s.post(
                 f"https://discord.com/api/v10/channels/{channel_id}/messages",
                 json=payload,
-                headers={
-                    "Authorization": f"Bot {BOT_TOKEN}",
-                    "Content-Type":  "application/json",
-                },
+                headers={"Authorization": f"Bot {BOT_TOKEN}", "Content-Type": "application/json"},
             ) as r:
                 from aiohttp.web import Response
                 return Response(status=r.status, text=await r.text())
@@ -1490,7 +1510,7 @@ async def handle_steal_notify(request):
         from aiohttp.web import Response
         return Response(status=500, text=str(e))
 
-# 🌸 ── !sync ───────────────────────────────────────────────────────────────────
+# ── !sync ──────────────────────────────────────────────────────────────────────
 
 @bot.command(name="sync")
 async def sync_cmd(ctx: commands.Context):
@@ -1498,30 +1518,27 @@ async def sync_cmd(ctx: commands.Context):
         await ctx.send("🚫 **Access Denied.**")
         return
     await tree.sync()
-    await ctx.send(f"✅ **Slash commands synced!** `{len(tree.get_commands())}` commands registered.")
+    await ctx.send(f"✅ **Slash Commands Synced!** `{len(tree.get_commands())}` Commands Registered.")
 
-# 🌸 ── on_ready ────────────────────────────────────────────────────────────────
+# ── on_ready ───────────────────────────────────────────────────────────────────
 
 @bot.event
 async def on_ready():
     await tree.sync()
-    print(f"[KW] 🌸 Logged in as: {bot.user}")
-    print(f"[KW] ✅ Slash commands synced!")
-
+    print(f"[KW] Logged In As: {bot.user}")
+    print(f"[KW] Slash Commands Synced!")
     from aiohttp import web as aio_web
-
-    app = aio_web.Application()
+    app    = aio_web.Application()
     app.router.add_post("/steal-notify", handle_steal_notify)
-
     port   = int(os.environ.get("PORT", 10000))
     runner = aio_web.AppRunner(app)
     await runner.setup()
     site   = aio_web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    print(f"[KW] 🌐 HTTP server running on port {port}")
+    print(f"[KW] HTTP Server Running On Port {port}")
     await refresh_thumb_cache()
 
-# 🌸 ── Keep Alive (chống ngủ đông trên Render free) ───────────────────────────
+# ── Keep Alive ─────────────────────────────────────────────────────────────────
 
 async def keep_alive():
     await bot.wait_until_ready()
@@ -1530,12 +1547,12 @@ async def keep_alive():
         try:
             async with aiohttp.ClientSession() as s:
                 await s.get(url)
-            print("[KW] 💓 Keep-alive ping sent")
+            print("[KW] Keep-Alive Ping Sent")
         except Exception as e:
-            print(f"[KW] ⚠️ Keep-alive failed: {e}")
-        await asyncio.sleep(600)  # ping mỗi 10 phút
+            print(f"[KW] Warning: Keep-Alive Failed: {e}")
+        await asyncio.sleep(600)
 
-# 🌸 ── Run ─────────────────────────────────────────────────────────────────────
+# ── Run ────────────────────────────────────────────────────────────────────────
 
 async def main():
     async with bot:
