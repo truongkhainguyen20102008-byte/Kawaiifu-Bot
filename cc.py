@@ -16,7 +16,8 @@ BOT_TOKEN       = os.environ.get("BOT_TOKEN", "")
 GITHUB_TOKEN    = os.environ.get("GITHUB_TOKEN", "")
 GITHUB_USER     = os.environ.get("GITHUB_USER",     "truongkhainguyen20102008-byte")
 GITHUB_REPO     = os.environ.get("GITHUB_REPO",     "thumbnails.json")
-GITHUB_FILE     = os.environ.get("GITHUB_FILE",     "thumbnails.json")
+GITHUB_FILE     = os.environ.get("GITHUB_FILE",     "thumbnails.lua")   # Lua table format: ["name"] = "url"
+GITHUB_FILE2    = os.environ.get("GITHUB_FILE2",    "thumbnails1.json")  # JSON format:      {"name": "url"}
 GITHUB_BRANCH   = os.environ.get("GITHUB_BRANCH",   "main")
 SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "")
 RAILWAY_PROXY   = "https://ioioioioioioi.up.railway.app/img"
@@ -34,15 +35,34 @@ FLAGS_V2_EPH   = FLAGS_V2 | FLAGS_EPHEMERAL   # Components V2 + ephemeral
 OWNER_ID        = 698675478093103136
 STEAL_CHANNEL   = os.environ.get("STEAL_CHANNEL", "0")   # Discord channel ID for steal notifications
 
-# 🌸 ── Steal Storage (in-memory) ──────────────────────────────────────────────
+# 🌸 ── Steal Storage (persistent JSON) ─────────────────────────────────────────
+
+DATA_FILE = "steal_data.json"  # saved next to c.py on disk
+
+def _load_data() -> tuple[dict, dict, list]:
+    """Load user_map, discord_map, steal_log from disk. Returns defaults if missing."""
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        um  = d.get("user_map",    {})
+        dm  = d.get("discord_map", {})
+        sl  = d.get("steal_log",   [])
+        return um, dm, sl
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}, {}, []
+
+def _save_data():
+    """Persist current state to disk."""
+    try:
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump({"user_map": user_map, "discord_map": discord_map, "steal_log": steal_log}, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[KW] ⚠️ Failed to save data: {e}")
 
 # user_map:     { roblox_username_lower -> discord_id_str }
 # discord_map:  { discord_id_str -> roblox_username_lower }  (reverse lookup)
-user_map:    dict[str, str] = {}
-discord_map: dict[str, str] = {}  # discord_id -> current roblox username
-
-# steal_log: list of dicts { pet, value, mutation, roblox_user, discord_id, ts }
-steal_log: list[dict] = []
+# steal_log:    list of dicts { pet, value, mutation, roblox_user, discord_id, ts, og }
+user_map, discord_map, steal_log = _load_data()
 
 OG_PETS = {
     "strawberry elephant", "meowl", "skibidi toilet", "headless horseman",
@@ -56,8 +76,35 @@ def is_og(name: str) -> bool:
 
 GITHUB_IMG_BASE = "https://raw.githubusercontent.com/venom-picture/venom-hub-pets1/main/"
 
+# In-memory thumbnail cache (loaded from GitHub JSON at startup and after each push)
+_thumb_cache: dict[str, str] = {}
+
 def pet_img(name: str) -> str:
-    return GITHUB_IMG_BASE + name.lower().replace(" ", "_") + ".png"
+    """Return thumbnail URL for a pet. Uses GitHub cache if available, else fallback."""
+    if not name:
+        return ""
+    key = name.lower().strip()
+    if key in _thumb_cache:
+        return _thumb_cache[key]
+    # Fallback: build URL from GITHUB_IMG_BASE (old behaviour)
+    return GITHUB_IMG_BASE + key.replace(" ", "_") + ".png"
+
+async def refresh_thumb_cache():
+    """Load thumbnail URLs from GitHub JSON file into _thumb_cache."""
+    global _thumb_cache
+    try:
+        url     = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{GITHUB_FILE2}?ref={GITHUB_BRANCH}"
+        headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+        async with aiohttp.ClientSession() as s:
+            async with s.get(url, headers=headers) as r:
+                if r.status == 200:
+                    result  = await r.json()
+                    decoded = base64.b64decode(result["content"]).decode()
+                    loaded  = json.loads(decoded)
+                    _thumb_cache = {k.lower().strip(): v for k, v in loaded.items()}
+                    print(f"[KW] ✅ Thumbnail cache refreshed — {len(_thumb_cache)} pets")
+    except Exception as e:
+        print(f"[KW] ⚠️ Could not refresh thumbnail cache: {e}")
 
 # 🌸 ── Bot Setup ───────────────────────────────────────────────────────────────
 
@@ -210,22 +257,55 @@ def to_lua_table(data: dict) -> str:
         lines.append(f'    ["{ek}"]{pad}= "{ev}",')
     return "\n".join(lines)
 
+async def _get_file_sha(session: aiohttp.ClientSession, filename: str) -> str | None:
+    """Get current SHA of a file on GitHub (needed for PUT). Returns None if file doesn't exist."""
+    url     = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{filename}?ref={GITHUB_BRANCH}"
+    headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
+    async with session.get(url, headers=headers) as r:
+        if r.status == 200:
+            return (await r.json()).get("sha")
+        return None
+
 async def push_thumbnails(data: dict, sha: str, msg: str):
+    """Push sorted data to BOTH GitHub files: Lua table + JSON."""
     sorted_data = dict(sorted(data.items(), key=lambda x: x[0].lower()))
-    url         = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{GITHUB_FILE}"
     headers     = {
         "Authorization": f"token {GITHUB_TOKEN}",
         "Accept":        "application/vnd.github.v3+json",
         "Content-Type":  "application/json",
     }
-    encoded = base64.b64encode(to_lua_table(sorted_data).encode()).decode()
+
+    # ── File 1: Lua table  ["name"] = "url", ─────────────────────────────────
+    lua_encoded  = base64.b64encode(to_lua_table(sorted_data).encode()).decode()
+    url1         = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{GITHUB_FILE}"
+
+    # ── File 2: JSON  {"name": "url"} ────────────────────────────────────────
+    json_content = json.dumps(sorted_data, ensure_ascii=False, indent=2)
+    json_encoded = base64.b64encode(json_content.encode()).decode()
+    url2         = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{GITHUB_FILE2}"
+
     async with aiohttp.ClientSession() as s:
-        async with s.put(
-            url, headers=headers,
-            json={"message": msg, "content": encoded, "sha": sha, "branch": GITHUB_BRANCH}
+        # Push Lua file
+        async with s.put(url1, headers=headers,
+            json={"message": msg, "content": lua_encoded, "sha": sha, "branch": GITHUB_BRANCH}
         ) as r:
             if r.status not in (200, 201):
-                raise Exception(f"GitHub Push {r.status}: {(await r.text())[:300]}")
+                raise Exception(f"GitHub Push (lua) {r.status}: {(await r.text())[:300]}")
+
+        # Get SHA for JSON file (may not exist yet)
+        sha2 = await _get_file_sha(s, GITHUB_FILE2)
+        payload2: dict = {"message": msg, "content": json_encoded, "branch": GITHUB_BRANCH}
+        if sha2:
+            payload2["sha"] = sha2
+
+        # Push JSON file
+        async with s.put(url2, headers=headers, json=payload2) as r:
+            if r.status not in (200, 201):
+                # Non-fatal — log warning but don't crash
+                print(f"[KW] ⚠️ GitHub JSON push failed {r.status}: {(await r.text())[:200]}")
+
+    # Refresh in-memory cache after successful push
+    await refresh_thumb_cache()
 
 # 🌸 ── Fandom Scraper ──────────────────────────────────────────────────────────
 
@@ -867,6 +947,7 @@ async def on_interaction(interaction: discord.Interaction):
 
             user_map[key]    = did
             discord_map[did] = key
+            _save_data()
             getattr(bot, "_pending_steal", {}).pop(did, None)
 
             async with aiohttp.ClientSession() as s:
@@ -1154,8 +1235,9 @@ async def steal_cmd(
         old_did = user_map[key]
         discord_map.pop(old_did, None)
 
-    user_map[key]  = did
+    user_map[key]    = did
     discord_map[did] = key
+    _save_data()
 
     status = "🔄 **Updated** — Roblox username changed." if roblox_already_linked else "✅ **Newly registered**"
 
@@ -1305,6 +1387,7 @@ async def stealclear_cmd(interaction: discord.Interaction):
     if not await owner_check(interaction): return
     count = len(steal_log)
     steal_log.clear()
+    _save_data()
     await interaction.response.send_message(
         f"🗑️ Cleared `{count}` steal records.", ephemeral=True
     )
@@ -1356,7 +1439,9 @@ async def handle_steal_notify(request):
         mutation    = data.get("mutation", "None")
         ts          = int(time.time())
         og          = is_og(pet_name)
-        img_url     = pet_img(pet_name)
+        # Use img_url sent by Lua (already resolved from GitHub JSON cache)
+        # Fall back to bot's own cache, then static URL
+        img_url     = data.get("img_url") or pet_img(pet_name)
         color       = 16753920 if og else 3092790
 
         # Look up Discord ID from user_map
@@ -1373,6 +1458,7 @@ async def handle_steal_notify(request):
             "ts":          ts,
             "og":          og,
         })
+        _save_data()
 
         channel_id = int(STEAL_CHANNEL)
         if not channel_id:
@@ -1460,6 +1546,7 @@ async def on_ready():
     site   = aio_web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
     print(f"[KW] 🌐 HTTP server running on port {port}")
+    await refresh_thumb_cache()
 
 # 🌸 ── Run ─────────────────────────────────────────────────────────────────────
 
