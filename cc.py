@@ -12,17 +12,14 @@ import os
 
 # 🌸 ── Config ──────────────────────────────────────────────────────────────────
 
-BOT_TOKEN       = os.environ.get("BOT_TOKEN", "")
-GITHUB_TOKEN    = os.environ.get("GITHUB_TOKEN", "")
-GITHUB_USER     = os.environ.get("GITHUB_USER",     "truongkhainguyen20102008-byte")
-GITHUB_REPO     = os.environ.get("GITHUB_REPO",     "thumbnails.json")
-GITHUB_FILE     = os.environ.get("GITHUB_FILE",     "thumbnails.lua")   # Lua table format: ["name"] = "url"
-GITHUB_FILE2    = os.environ.get("GITHUB_FILE2",    "thumbnails1.json")  # JSON format:      {"name": "url"}
-GITHUB_BRANCH   = os.environ.get("GITHUB_BRANCH",   "main")
+BOT_TOKEN    = os.environ.get("BOT_TOKEN", "")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+GITHUB_USER  = os.environ.get("GITHUB_USER",  "truongkhainguyen20102008-byte")
+GITHUB_REPO  = os.environ.get("GITHUB_REPO",  "thumbnails.json")
+GITHUB_FILE  = os.environ.get("GITHUB_FILE",  "thumbnails.json")
+GITHUB_FILE2 = os.environ.get("GITHUB_FILE2", "thumbnails1.json")
+GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
 SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "e8199d05cb8cb7de6e00cc1cc9820fc8")
-RAILWAY_PROXY   = "https://ioioioioioioi.up.railway.app/img"
-FANDOM_BASE     = "https://stealabrainrot.fandom.com/wiki/"
-BOT_NAME        = "𝐊𝐚𝐢𝐰𝐚𝐢𝐢𝐟𝐮"
 
 def make_footer() -> str:
     ts = int(time.time())
