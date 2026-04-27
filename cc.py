@@ -12,32 +12,34 @@ import os
 
 # 🌸 ── Config ──────────────────────────────────────────────────────────────────
 
-BOT_TOKEN    = os.environ.get("BOT_TOKEN", "")
-GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-GITHUB_USER  = os.environ.get("GITHUB_USER",  "truongkhainguyen20102008-byte")
-GITHUB_REPO  = os.environ.get("GITHUB_REPO",  "thumbnails.json")
-GITHUB_FILE  = os.environ.get("GITHUB_FILE",  "thumbnails.json")
-GITHUB_FILE2 = os.environ.get("GITHUB_FILE2", "thumbnails1.json")
-GITHUB_BRANCH = os.environ.get("GITHUB_BRANCH", "main")
+BOT_TOKEN       = os.environ.get("BOT_TOKEN",       "")
+GITHUB_TOKEN    = os.environ.get("GITHUB_TOKEN",    "")
+GITHUB_USER     = os.environ.get("GITHUB_USER",     "truongkhainguyen20102008-byte")
+GITHUB_REPO     = os.environ.get("GITHUB_REPO",     "thumbnails.json")
+GITHUB_FILE     = os.environ.get("GITHUB_FILE",     "thumbnails.json")
+GITHUB_FILE2    = os.environ.get("GITHUB_FILE2",    "thumbnails1.json")
+GITHUB_BRANCH   = os.environ.get("GITHUB_BRANCH",   "main")
 SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "e8199d05cb8cb7de6e00cc1cc9820fc8")
+RAILWAY_PROXY   = "https://ioioioioioioi.up.railway.app/img"
+FANDOM_BASE     = "https://stealabrainrot.fandom.com/wiki/"
+BOT_NAME        = "𝐊𝐚𝐢𝐰𝐚𝐢𝐢𝐟𝐮"
 
 def make_footer() -> str:
     ts = int(time.time())
     return f"-# discord.gg/kawaiifunotifier  |  ✿  |  <t:{ts}:F>"
 
 FOOTER_TEXT = "-# discord.gg/kawaiifunotifier  |  ✿"
-FLAGS_V2       = 32768
+FLAGS_V2        = 32768
 FLAGS_EPHEMERAL = 64
-FLAGS_V2_EPH   = FLAGS_V2 | FLAGS_EPHEMERAL   # Components V2 + ephemeral
+FLAGS_V2_EPH    = FLAGS_V2 | FLAGS_EPHEMERAL   # Components V2 + ephemeral
 OWNER_ID        = 698675478093103136
 STEAL_CHANNEL   = os.environ.get("STEAL_CHANNEL", "0")   # Discord channel ID for steal notifications
 
 # 🌸 ── Steal Storage (persistent JSON) ─────────────────────────────────────────
 
-DATA_FILE = "steal_data.json"  # saved next to c.py on disk
+DATA_FILE = "steal_data.json"
 
 def _load_data() -> tuple[dict, dict, list]:
-    """Load user_map, discord_map, steal_log from disk. Returns defaults if missing."""
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
             d = json.load(f)
@@ -49,16 +51,12 @@ def _load_data() -> tuple[dict, dict, list]:
         return {}, {}, []
 
 def _save_data():
-    """Persist current state to disk."""
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump({"user_map": user_map, "discord_map": discord_map, "steal_log": steal_log}, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"[KW] ⚠️ Failed to save data: {e}")
 
-# user_map:     { roblox_username_lower -> discord_id_str }
-# discord_map:  { discord_id_str -> roblox_username_lower }  (reverse lookup)
-# steal_log:    list of dicts { pet, value, mutation, roblox_user, discord_id, ts, og }
 user_map, discord_map, steal_log = _load_data()
 
 OG_PETS = {
@@ -73,21 +71,17 @@ def is_og(name: str) -> bool:
 
 GITHUB_IMG_BASE = "https://raw.githubusercontent.com/venom-picture/venom-hub-pets1/main/"
 
-# In-memory thumbnail cache (loaded from GitHub JSON at startup and after each push)
 _thumb_cache: dict[str, str] = {}
 
 def pet_img(name: str) -> str:
-    """Return thumbnail URL for a pet. Uses GitHub cache if available, else fallback."""
     if not name:
         return ""
     key = name.lower().strip()
     if key in _thumb_cache:
         return _thumb_cache[key]
-    # Fallback: build URL from GITHUB_IMG_BASE (old behaviour)
     return GITHUB_IMG_BASE + key.replace(" ", "_") + ".png"
 
 async def refresh_thumb_cache():
-    """Load thumbnail URLs from GitHub JSON file into _thumb_cache."""
     global _thumb_cache
     try:
         url     = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{GITHUB_FILE2}?ref={GITHUB_BRANCH}"
@@ -167,7 +161,6 @@ async def send_v2(interaction: discord.Interaction, components: list[dict]):
                 raise Exception(f"Discord {r.status}: {(await r.text())[:200]}")
 
 async def send_v2_eph(interaction: discord.Interaction, components: list[dict]):
-    """Send an ephemeral response — only visible to the user who ran the command."""
     url = webhook_url(interaction)
     async with aiohttp.ClientSession() as s:
         async with s.post(url, json={"flags": FLAGS_V2_EPH, "components": components}) as r:
@@ -255,7 +248,6 @@ def to_lua_table(data: dict) -> str:
     return "\n".join(lines)
 
 async def _get_file_sha(session: aiohttp.ClientSession, filename: str) -> str | None:
-    """Get current SHA of a file on GitHub (needed for PUT). Returns None if file doesn't exist."""
     url     = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{filename}?ref={GITHUB_BRANCH}"
     headers = {"Authorization": f"token {GITHUB_TOKEN}", "Accept": "application/vnd.github.v3+json"}
     async with session.get(url, headers=headers) as r:
@@ -264,7 +256,6 @@ async def _get_file_sha(session: aiohttp.ClientSession, filename: str) -> str | 
         return None
 
 async def push_thumbnails(data: dict, sha: str, msg: str):
-    """Push sorted data to BOTH GitHub files: Lua table + JSON."""
     sorted_data = dict(sorted(data.items(), key=lambda x: x[0].lower()))
     headers     = {
         "Authorization": f"token {GITHUB_TOKEN}",
@@ -272,36 +263,29 @@ async def push_thumbnails(data: dict, sha: str, msg: str):
         "Content-Type":  "application/json",
     }
 
-    # ── File 1: Lua table  ["name"] = "url", ─────────────────────────────────
     lua_encoded  = base64.b64encode(to_lua_table(sorted_data).encode()).decode()
     url1         = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{GITHUB_FILE}"
 
-    # ── File 2: JSON  {"name": "url"} ────────────────────────────────────────
     json_content = json.dumps(sorted_data, ensure_ascii=False, indent=2)
     json_encoded = base64.b64encode(json_content.encode()).decode()
     url2         = f"https://api.github.com/repos/{GITHUB_USER}/{GITHUB_REPO}/contents/{GITHUB_FILE2}"
 
     async with aiohttp.ClientSession() as s:
-        # Push Lua file
         async with s.put(url1, headers=headers,
             json={"message": msg, "content": lua_encoded, "sha": sha, "branch": GITHUB_BRANCH}
         ) as r:
             if r.status not in (200, 201):
                 raise Exception(f"GitHub Push (lua) {r.status}: {(await r.text())[:300]}")
 
-        # Get SHA for JSON file (may not exist yet)
         sha2 = await _get_file_sha(s, GITHUB_FILE2)
         payload2: dict = {"message": msg, "content": json_encoded, "branch": GITHUB_BRANCH}
         if sha2:
             payload2["sha"] = sha2
 
-        # Push JSON file
         async with s.put(url2, headers=headers, json=payload2) as r:
             if r.status not in (200, 201):
-                # Non-fatal — log warning but don't crash
                 print(f"[KW] ⚠️ GitHub JSON push failed {r.status}: {(await r.text())[:200]}")
 
-    # Refresh in-memory cache after successful push
     await refresh_thumb_cache()
 
 # 🌸 ── Fandom Scraper ──────────────────────────────────────────────────────────
@@ -691,7 +675,6 @@ async def listpets(interaction: discord.Interaction):
             if j > 0:
                 items.append(sep())
             items.append(section(f"**{pname}**", data[pname]))
-        # Interleave dividers between section cards
         interleaved = []
         for idx, item in enumerate(items):
             if idx > 0:
@@ -712,10 +695,35 @@ async def fetchpet(interaction: discord.Interaction, name: str):
     if not await owner_check(interaction): return
     await interaction.response.defer(thinking=True, ephemeral=True)
 
+    wh_url = webhook_url(interaction)
+
+    # Gửi trạng thái đang scrape để tránh timeout
+    async with aiohttp.ClientSession() as s:
+        await s.post(wh_url, json={"flags": FLAGS_V2_EPH, "components": [container(
+            txt(f"## 🔍 Đang tìm ảnh..."),
+            sep(),
+            txt(f"🐾 **Pet:** `{name}`\n\n⏳ Đang scrape Fandom wiki, vui lòng chờ..."),
+            *footer(),
+        )]})
+
+    orig_url = f"{wh_url}/messages/@original"
+
+    async def update(components):
+        async with aiohttp.ClientSession() as s:
+            await s.patch(orig_url, json={"flags": FLAGS_V2_EPH, "components": components})
+
     try:
-        wikia_url, debug_info = await scrape_fandom_image(name)
+        wikia_url, debug_info = await asyncio.wait_for(scrape_fandom_image(name), timeout=35)
+    except asyncio.TimeoutError:
+        await update([container(
+            txt("## ⏰ Scrape Timeout"),
+            sep(),
+            txt(f"🐾 **Pet:** `{name}`\n\n❌ Fandom wiki không phản hồi sau 35 giây.\n\n💡 Thử lại sau hoặc dùng `/addpet` để thêm URL thủ công."),
+            *footer(),
+        )])
+        return
     except Exception as e:
-        await send_v2_eph(interaction, [container(
+        await update([container(
             txt("## 🌐 Scrape Failed"),
             sep(),
             txt(f"🐾 **Pet:** `{name}`\n\n⚠️ **Exception:**\n```\n{e}\n```"),
@@ -725,7 +733,7 @@ async def fetchpet(interaction: discord.Interaction, name: str):
 
     if not wikia_url:
         page_url = FANDOM_BASE + quote(name.replace(" ", "_"))
-        await send_v2_eph(interaction, [container(
+        await update([container(
             txt("## 🔍 Image Not Found On Wiki"),
             sep(),
             txt(
@@ -745,7 +753,7 @@ async def fetchpet(interaction: discord.Interaction, name: str):
     try:
         data, sha = await fetch_thumbnails()
     except Exception as e:
-        await send_v2_eph(interaction, [container(
+        await update([container(
             txt("## 🌩️ GitHub Error"),
             sep(),
             txt(f"💾 **Operation:** Fetch Pet\n🐾 **Pet:** `{name}`\n\n⛔ **Error:**\n```\n{e}\n```"),
@@ -755,7 +763,6 @@ async def fetchpet(interaction: discord.Interaction, name: str):
 
     if name in data:
         existing_url = data[name]
-        wh_url       = webhook_url(interaction)
         payload = {
             "flags": FLAGS_V2_EPH,
             "components": [
@@ -777,10 +784,7 @@ async def fetchpet(interaction: discord.Interaction, name: str):
                 ),
             ],
         }
-        async with aiohttp.ClientSession() as s:
-            async with s.post(wh_url, json=payload) as r:
-                if r.status not in (200, 204):
-                    raise Exception(f"Discord {r.status}: {(await r.text())[:200]}")
+        await update(payload["components"])
 
         bot._fetchpet_pending       = getattr(bot, "_fetchpet_pending", {})
         bot._fetchpet_pending[name] = {"railway_url": railway_url, "data": data, "sha": sha}
@@ -795,7 +799,7 @@ async def fetchpet(interaction: discord.Interaction, name: str):
         err = str(e)
 
     if ok:
-        await send_v2_eph(interaction, [container(
+        await update([container(
             txt("## 🌐 Pet Image Added Successfully"),
             sep(),
             section(f"🐾 **{name}**\n\n🚂 **Railway URL**\n```\n{short_url}\n```", railway_url),
@@ -804,7 +808,7 @@ async def fetchpet(interaction: discord.Interaction, name: str):
             *footer(),
         )])
     else:
-        await send_v2_eph(interaction, [container(
+        await update([container(
             txt("## 💥 Failed To Save Pet"),
             sep(),
             txt(f"🐾 **Pet:** `{name}`\n\n📦 **GitHub** — ❌ Push failed\n```\n{err[:200]}\n```"),
@@ -915,7 +919,7 @@ async def on_interaction(interaction: discord.Interaction):
         async with aiohttp.ClientSession() as s:
             await s.patch(orig_url, json={"flags": FLAGS_V2, "components": components})
 
-    # 🌸 Steal — Yes / No confirm (change roblox username for a Discord ID)
+    # 🌸 Steal — Yes / No confirm
 
     if custom_id.startswith("steal_confirm_yes:") or custom_id.startswith("steal_confirm_no:"):
         did    = custom_id.split(":")[1]
@@ -937,7 +941,6 @@ async def on_interaction(interaction: discord.Interaction):
             key        = pending["key"]
             roblox_str = pending["roblox_user"]
 
-            # Remove old reverse entry
             old_roblox = discord_map.get(did)
             if old_roblox:
                 user_map.pop(old_roblox, None)
@@ -964,7 +967,7 @@ async def on_interaction(interaction: discord.Interaction):
 
     if custom_id.startswith("mypets_prev:") or custom_id.startswith("mypets_next:"):
         parts      = custom_id.split(":")
-        action     = parts[0]          # mypets_prev or mypets_next
+        action     = parts[0]
         discord_id = parts[1]
         cur_page   = int(parts[2])
         new_page   = cur_page - 1 if action == "mypets_prev" else cur_page + 1
@@ -1137,9 +1140,7 @@ async def on_interaction(interaction: discord.Interaction):
             *footer(),
         )])
 
-# 🌸 ── /steal ─────────────────────────────────────────────────────────────────
-# Chỉ đăng ký mapping Roblox username → Discord ID
-# Khi Lua script gửi thông báo steal, bot sẽ tra cứu mapping này để tag đúng users
+# 🌸 ── /steal ──────────────────────────────────────────────────────────────────
 
 @tree.command(name="steal", description="Register a Roblox username and Discord ID for a stealer.")
 @discord.app_commands.describe(
@@ -1166,14 +1167,13 @@ async def steal_cmd(
     key = roblox_user.strip().lower()
     did = discord_id.strip()
 
-    roblox_already_linked = key in user_map        # this roblox name is registered
-    discord_already_has   = did in discord_map     # this discord id already has a roblox
+    roblox_already_linked = key in user_map
+    discord_already_has   = did in discord_map
     same_roblox_same_did  = roblox_already_linked and user_map[key] == did
     same_did_diff_roblox  = discord_already_has and discord_map[did] != key
 
     wh_url = webhook_url(interaction)
 
-    # ── Case 1: exact same pair already registered ────────────────────────────
     if same_roblox_same_did:
         await send_v2_eph(interaction, [container(
             txt("## ✅ Already Registered"),
@@ -1187,11 +1187,9 @@ async def steal_cmd(
         )])
         return
 
-    # ── Case 2: Discord ID already linked to a DIFFERENT Roblox username ─────
     if same_did_diff_roblox:
         old_roblox = discord_map[did]
 
-        # Store pending change so button handler can apply it
         if not hasattr(bot, "_pending_steal"):
             bot._pending_steal = {}
         bot._pending_steal[did] = {"key": key, "roblox_user": roblox_user.strip(), "did": did}
@@ -1226,8 +1224,6 @@ async def steal_cmd(
             await s.post(wh_url, json={"flags": FLAGS_V2_EPH, "components": confirm_components})
         return
 
-    # ── Case 3: fresh registration or roblox-key change ──────────────────────
-    # Remove old reverse entry if roblox key was previously mapped to another discord
     if roblox_already_linked:
         old_did = user_map[key]
         discord_map.pop(old_did, None)
@@ -1249,14 +1245,11 @@ async def steal_cmd(
         *footer(),
     )])
 
-# 🌸 ── /mypets ───────────────────────────────────────────────────────────────
-# Per-user paginated steal history, style like the screenshot
-# Pages stored in bot._mypets_pages keyed by user_id
+# 🌸 ── /mypets ─────────────────────────────────────────────────────────────────
 
 PAGE_SIZE = 5
 
 def _parse_value(val: str) -> float:
-    """Parse pet value string like '$1.4B/s' into a float."""
     try:
         v = val.replace("$","").replace(",","").strip()
         for suffix, exp in [("B/s",1e9),("M/s",1e6),("K/s",1e3),("B",1e9),("M",1e6),("K",1e3)]:
@@ -1267,7 +1260,6 @@ def _parse_value(val: str) -> float:
         return 0.0
 
 def _fmt_value(n: float) -> str:
-    """Format float back to compact string like 1.4B."""
     if n >= 1e9: return f"{n/1e9:.2f}B".rstrip("0").rstrip(".")
     if n >= 1e6: return f"{n/1e6:.2f}M".rstrip("0").rstrip(".")
     if n >= 1e3: return f"{n/1e3:.2f}K".rstrip("0").rstrip(".")
@@ -1276,8 +1268,7 @@ def _fmt_value(n: float) -> str:
 PINK = 16758725  # 0xFFB7C5 sakura pink
 
 def build_mypets_page(logs: list[dict], page: int, discord_id: str, username: str = "") -> list[dict]:
-    """Build Components V2 for one page of /mypets."""
-    total_pages  = max(1, -(-len(logs) // PAGE_SIZE))  # ceil div
+    total_pages  = max(1, -(-len(logs) // PAGE_SIZE))
     start        = page * PAGE_SIZE
     chunk        = logs[start:start + PAGE_SIZE]
     total_steals = len(logs)
@@ -1286,14 +1277,12 @@ def build_mypets_page(logs: list[dict], page: int, discord_id: str, username: st
 
     display_name = f"@{username}" if username else f"<@{discord_id}>"
 
-    # ── Header text ──────────────────────────────────────────────────────────
     header_text = (
         f"**Steal Profile**\n"
         f"{display_name}\n"
         f"Total Steals: {total_steals}  ·  Total Value: {val_str}"
     )
 
-    # ── Pet rows ─────────────────────────────────────────────────────────────
     components: list[dict] = [
         {"type": 10, "content": header_text},
         {"type": 14, "divider": True, "spacing": 1},
@@ -1322,7 +1311,6 @@ def build_mypets_page(logs: list[dict], page: int, discord_id: str, username: st
 
     container_block = {"type": 17, "accent_color": PINK, "components": components}
 
-    # ── Prev / Next buttons ───────────────────────────────────────────────────
     prev_btn = {
         "type": 2, "style": 2,
         "label": "◀  Previous",
@@ -1345,8 +1333,6 @@ async def mypets_cmd(interaction: discord.Interaction):
     await interaction.response.defer(thinking=True, ephemeral=True)
 
     discord_id = str(interaction.user.id)
-
-    # Find this user's logs
     logs = [e for e in steal_log if e.get("discord_id") == discord_id]
 
     if not logs:
@@ -1366,7 +1352,6 @@ async def mypets_cmd(interaction: discord.Interaction):
             })
         return
 
-    # Cache logs + username for button navigation
     if not hasattr(bot, "_mypets_pages"):
         bot._mypets_pages = {}
     username = interaction.user.display_name
@@ -1417,10 +1402,8 @@ async def stealusers_cmd(interaction: discord.Interaction):
     )])
 
 # 🌸 ── HTTP endpoint nhận thông báo từ Lua script ─────────────────────────────
-# Bot expose một endpoint đơn giản để Lua gọi tới, bot tự gửi Components V2
 
 async def handle_steal_notify(request):
-    """POST /steal-notify  body: { secret, roblox_user, pet, value, mutation }"""
     try:
         data       = await request.json()
         secret     = data.get("secret", "")
@@ -1436,16 +1419,12 @@ async def handle_steal_notify(request):
         mutation    = data.get("mutation", "None")
         ts          = int(time.time())
         og          = is_og(pet_name)
-        # Use img_url sent by Lua (already resolved from GitHub JSON cache)
-        # Fall back to bot's own cache, then static URL
         img_url     = data.get("img_url") or pet_img(pet_name)
         color       = 16753920 if og else 3092790
 
-        # Look up Discord ID from user_map
         discord_id  = user_map.get(roblox_user.lower())
         stolen_by   = f"<@{discord_id}>" if discord_id else f"@{roblox_user}"
 
-        # Log the steal entry
         steal_log.append({
             "pet":         pet_name,
             "value":       value,
@@ -1469,10 +1448,8 @@ async def handle_steal_notify(request):
                     "type": 17,
                     "accent_color": PINK,
                     "components": [
-                        # Title
                         {"type": 10, "content": "# 🌸 Kawaiifu Notifier | Steals 🌸"},
                         {"type": 14, "divider": True, "spacing": 1},
-                        # Pet row with thumbnail
                         {
                             "type": 9,
                             "components": [{
@@ -1531,7 +1508,6 @@ async def on_ready():
     print(f"[KW] 🌸 Logged in as: {bot.user}")
     print(f"[KW] ✅ Slash commands synced!")
 
-    # Start HTTP server to receive steal notifications from Lua script
     from aiohttp import web as aio_web
 
     app = aio_web.Application()
@@ -1545,6 +1521,25 @@ async def on_ready():
     print(f"[KW] 🌐 HTTP server running on port {port}")
     await refresh_thumb_cache()
 
+# 🌸 ── Keep Alive (chống ngủ đông trên Render free) ───────────────────────────
+
+async def keep_alive():
+    await bot.wait_until_ready()
+    url = os.environ.get("RENDER_EXTERNAL_URL", "https://kawaiifu-bot.onrender.com")
+    while not bot.is_closed():
+        try:
+            async with aiohttp.ClientSession() as s:
+                await s.get(url)
+            print("[KW] 💓 Keep-alive ping sent")
+        except Exception as e:
+            print(f"[KW] ⚠️ Keep-alive failed: {e}")
+        await asyncio.sleep(600)  # ping mỗi 10 phút
+
 # 🌸 ── Run ─────────────────────────────────────────────────────────────────────
 
-bot.run(BOT_TOKEN)
+async def main():
+    async with bot:
+        asyncio.ensure_future(keep_alive())
+        await bot.start(BOT_TOKEN)
+
+asyncio.run(main())
