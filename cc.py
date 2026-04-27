@@ -19,7 +19,7 @@ GITHUB_REPO     = os.environ.get("GITHUB_REPO",     "thumbnails.json")
 GITHUB_FILE     = os.environ.get("GITHUB_FILE",     "thumbnails.lua")   # Lua table format: ["name"] = "url"
 GITHUB_FILE2    = os.environ.get("GITHUB_FILE2",    "thumbnails1.json")  # JSON format:      {"name": "url"}
 GITHUB_BRANCH   = os.environ.get("GITHUB_BRANCH",   "main")
-SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "")
+SCRAPER_API_KEY = os.environ.get("SCRAPER_API_KEY", "e8199d05cb8cb7de6e00cc1cc9820fc8")
 RAILWAY_PROXY   = "https://ioioioioioioi.up.railway.app/img"
 FANDOM_BASE     = "https://stealabrainrot.fandom.com/wiki/"
 BOT_NAME        = "𝐊𝐚𝐢𝐰𝐚𝐢𝐢𝐟𝐮"
